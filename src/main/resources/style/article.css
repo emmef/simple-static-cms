@@ -1,0 +1,7 @@
+@CHARSET "UTF-8";
+
+article {
+	min-width: 20em;
+	margin: 0;
+	padding: 0 1ex 0.25ex 1ex;
+}
