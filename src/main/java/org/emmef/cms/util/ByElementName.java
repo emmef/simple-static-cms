@@ -1,12 +1,13 @@
 package org.emmef.cms.util;
 
 import lombok.NonNull;
-import org.w3c.dom.Node;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
 
 import java.util.Comparator;
 import java.util.function.Predicate;
 
-public class ByElementName implements Predicate<Node> {
+public class ByElementName implements Predicate<Element> {
     private final String name;
     private final Comparator<String> comp;
 
@@ -16,7 +17,7 @@ public class ByElementName implements Predicate<Node> {
     }
 
     @Override
-    public boolean test(Node node) {
-        return node != null && node.getNodeType() == Node.ELEMENT_NODE && comp.compare(name, node.getNodeName()) == 0;
+    public boolean test(Element node) {
+        return node != null && comp.compare(name, node.nodeName()) == 0;
     }
 }

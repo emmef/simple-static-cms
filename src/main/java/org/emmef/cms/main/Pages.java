@@ -2,27 +2,18 @@ package org.emmef.cms.main;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringEscapeUtils;
 import org.emmef.cms.page.PageException;
 import org.emmef.cms.page.PageRecord;
-import org.w3c.dom.Document;
-import org.xml.sax.SAXException;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.transform.TransformerException;
 import java.io.*;
-import java.net.URLEncoder;
 import java.nio.file.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
 @Slf4j
 public class Pages {
-    private static DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-
     private static final Pattern HTML_PATTERN = Pattern.compile("\\.html?$", Pattern.CASE_INSENSITIVE);
 
     public static Pages readFrom(@NonNull Path source, @NonNull Path target) throws IOException {
@@ -74,8 +65,6 @@ public class Pages {
                 success = true;
                 collectedNames.add(dynamicPath);
             } catch (IOException e) {
-                e.printStackTrace();
-            } catch (TransformerException e) {
                 e.printStackTrace();
             }
             if (success && createPermanentFile) {
@@ -163,9 +152,6 @@ public class Pages {
                     catch (PageException e) {
                         log.error("Not a valid source file: " + file, e);
                     }
-                    catch (ParserConfigurationException | SAXException e) {
-                        log.error("Not a valid source file: " + file, e);
-                    }
                     catch (Exception e) {
                         e.printStackTrace();
                     }
@@ -185,17 +171,16 @@ public class Pages {
         collectedPages.values().forEach((page) -> page.replacePageReferences(index));
     }
 
-    private static PageRecord readFile(Path path) throws ParserConfigurationException, IOException, SAXException {
+    private static PageRecord readFile(Path path) throws IOException {
         try (InputStream fileStream = new FileInputStream(path.toFile())) {
             return getPageRecordFromStream(fileStream, path);
         }
 
     }
 
-    private static PageRecord getPageRecordFromStream(InputStream fileStream, Path path) throws ParserConfigurationException, SAXException, IOException {
-        DocumentBuilder builder = documentBuilderFactory.newDocumentBuilder();
-        Document document = builder.parse(fileStream);
+    private static PageRecord getPageRecordFromStream(InputStream fileStream, Path path) throws IOException {
+        Document document = Jsoup.parse(fileStream, "UTF-8", "");
 
-        return PageRecord.create(document, path);
+        return new PageRecord(document, path);
     }
 }

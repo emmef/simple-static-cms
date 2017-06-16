@@ -1,7 +1,8 @@
 package org.emmef.cms.util;
 
 import lombok.NonNull;
-import org.w3c.dom.Node;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
 
 import java.util.function.Predicate;
 
@@ -24,9 +25,9 @@ public class ByAttributeValue implements Predicate<Node> {
 
     @Override
     public boolean test(Node node) {
-        if (node != null && node.getNodeType() == Node.ELEMENT_NODE && node.hasAttributes()) {
-            Node namedItem = node.getAttributes().getNamedItem(attributeName);
-            return namedItem != null && namedItem.getNodeType() == Node.ATTRIBUTE_NODE && valuePredicate.test(namedItem.getNodeValue());
+        if (node != null && node instanceof Element && node.attributes().size() > 0) {
+            String value = node.attributes().get(attributeName);
+            return valuePredicate.test(value);
         }
         return false;
     }
