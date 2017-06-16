@@ -225,8 +225,9 @@ public class PageRecord {
         addHead();
         addBody();
 
-        document.outputSettings().charset(StandardCharsets.UTF_8);
-        document.outputSettings().escapeMode(org.jsoup.nodes.Entities.EscapeMode.base);
+        Document.OutputSettings outputSettings = document.outputSettings();
+        outputSettings.charset(StandardCharsets.UTF_8);
+        outputSettings.escapeMode(org.jsoup.nodes.Entities.EscapeMode.base);
         writer.append(document.outerHtml());
 
     }
@@ -243,7 +244,7 @@ public class PageRecord {
             addSimpleChild(head, "script")
                     .attr("type", "text/javascript")
                     .attr("src", "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML")
-                    .content("MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });");
+                    .getElement().appendChild(new DataNode("MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });", ""));
         }
 
         StringBuilder output = new StringBuilder();

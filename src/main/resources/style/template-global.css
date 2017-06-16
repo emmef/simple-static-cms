@@ -26,7 +26,7 @@
     nav .parents-element { color: #666; }
     nav .parents-separator-inner::before { content: "/"}
 
-    nav .current-element-self { color: black; font-weight: bolder; }
+    nav .current-element-self { color: black; font-weight: bolder; font-size:120%; }
 
     nav .children-element { font-size:80%; color:black; font-weight: bold; }
     nav .children-separator { color: #666; }
@@ -40,7 +40,7 @@
 
     article {  padding:0.5ex 0.5ex 0.25ex 0.5ex; margin:0; line-height:1.3;}
     article a { font-weight: bold; }
-    article * { min-width: 15em; max-width: 60em; }
+    article { min-width: 15em; max-width: 60em; }
 
     a.reference-ptr { font-size: 80%; font-style:italic; font-weight: bold; text-decoration: underline; }
 
