@@ -70,14 +70,12 @@ public class Pages {
         if (!collectedNames.contains(dynamicPath)) {
             try (FileWriter output = new FileWriter(dynamicPath.toFile())){
                 log.info("Wrote " + page);
-                writePage(page, output);
+                page.writePage(output);
                 success = true;
                 collectedNames.add(dynamicPath);
             } catch (IOException e) {
                 e.printStackTrace();
             } catch (TransformerException e) {
-                e.printStackTrace();
-            } catch (XMLStreamException e) {
                 e.printStackTrace();
             }
             if (success && createPermanentFile) {
@@ -93,130 +91,6 @@ public class Pages {
         }
     }
 
-    private static void writePage(PageRecord p, Writer output) throws IOException, XMLStreamException, TransformerException {
-        output.append("<!DOCTYPE html>\n");
-        output.append("<html>\n\t<head>\n");
-        title(output, p);
-        output.append("\t<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />\n");
-        output.append("\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=2, minimum-scale=0.6\"/>\n");
-        output.append("\t<meta name=\"robots\" content=\"noarchive\">\n");
-        output.append("\t<link href='http://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600' rel='stylesheet' type='text/css'>\n");
-        output.append("\t<link rel=\"StyleSheet\" href=\"./style/template-global.css\" type=\"text/css\">\n");
-        output.append("\t<link rel=\"StyleSheet\" href=\"./style/articles.css\" type=\"text/css\">\n");
-        if (p.isMath()) {
-            output.append("\t<script type=\"text/javascript\" src=\"https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML\">MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });</script>\n");
-        }
-        output.append("\n\t</head>\n\t<body>\n");
-        navigation(output, p);
-        output.append("\n\n");
-        p.appendArticle(output);
-        output.append("\n\t</body>\n</html>\n\n");
-    }
-
-    private static void navigation(Writer output, @NonNull PageRecord page) throws IOException {
-
-        List<PageRecord> parents = page.getParents(false);
-        if (!parents.isEmpty()) {
-            output.append("<nav class=\"parentnav\">");
-            writeLinks(null, output, parents, "parents", null, "/", null);
-            output.append("</nav>");
-        }
-        output.append("<nav class=\"siblingnav\">");
-        List<PageRecord> siblings = new ArrayList<>(page.getSiblings());
-        writeLinks(page, output, siblings, "siblings", null, "|", null);
-        output.append("</nav>");
-        ArrayList<PageRecord> children = new ArrayList<>(page.getChildren());
-        if (!children.isEmpty()) {
-            output.append("<nav class=\"childnav\">");
-            writeLinks(null, output, children, "children", null, "|", null);
-            output.append("</nav>");
-        }
-    }
-
-    private static void title(Writer output, @NonNull PageRecord page) throws IOException {
-        output.append("<title>");
-        output.append(StringEscapeUtils.escapeHtml(page.getTitle()).replaceAll("\\s", "&nbsp;"));
-
-        PageRecord parent = page.getParent();
-        if (parent != null) {
-            output.append(" &ndash; [");
-            parentTitle(output, parent);
-            output.append("]");
-        }
-        output.append("</title>");
-    }
-
-
-
-    private static void parentTitle(Writer output, PageRecord page) throws IOException {
-        PageRecord parent = page.getParent();
-        if (parent != null) {
-            parentTitle(output, parent);
-            output.append("/");
-        }
-        output.append(StringEscapeUtils.escapeHtml(page.getTitle()).replaceAll("\\s", "&nbsp;"));
-    }
-
-
-    private static void writeLinks(PageRecord self, Writer output, @NonNull List<PageRecord> pages, String baseClasses, String first, String inner, String last) throws IOException {
-        int size = pages.size();
-        if (size == 0) {
-            return;
-        }
-        for (int i = 0; i < size; i++) {
-            PageRecord page = pages.get(i);
-            boolean isFirst = i == 0;
-            boolean isLast = i == size - 1;
-            boolean isSelf = self != null && page.getId().equals(self.getId());
-
-            if (isFirst) {
-                appendSeparator(output, baseClasses, first, isFirst, false, isSelf);
-            }
-
-            output.append("<a href=\"./");
-            if (isSelf) {
-                output.append(page.getId().toString()).append(".html\"");
-            }
-            else {
-                output.append(URLEncoder.encode(page.getDynamicFilename(), "UTF-8")).append("\"");
-            }
-
-            appendClasses(output, baseClasses, isFirst, isLast, isSelf);
-            output.append(">");
-            StringEscapeUtils.escapeHtml(output, page.getTitle());
-            output.append("</a>");
-
-            appendSeparator(output, baseClasses, isLast ? last : inner, false, isLast, isSelf);
-        }
-    }
-
-    private static void appendSeparator(Writer output, String baseClasses, String separator, boolean isFirst, boolean isLast, boolean isSelf) throws IOException {
-        if (separator == null) {
-            return;
-        }
-        output.append("<span");
-        appendClasses(output, baseClasses, isFirst, isLast, isSelf);
-        output.append(">");
-        output.append(separator);
-        output.append("</span>");
-    }
-
-    private static void appendClasses(Writer output, String baseClasses, boolean isFirst, boolean isLast, boolean isSelf) throws IOException {
-        output.append(" class=\"").append(baseClasses);
-        if (isFirst) {
-            output.append(" first");
-        }
-        if (isLast) {
-            output.append(" last");
-        }
-        if (!isFirst & !isLast) {
-            output.append(" inner");
-        }
-        if (isSelf) {
-            output.append(" self");
-        }
-        output.append("\"");
-    }
 
     private static void createHierarchy(Map<UUID, PageRecord> index) {
         index.values().forEach((page) -> {
@@ -277,6 +151,7 @@ public class Pages {
                             }
                             else {
                                 duplicatePages.put(id, pageRecord);
+                                pageRecord.markDuplicate();
                                 log.error("Duplicate id '{}': page \"{}\" ({}) duplicates page \"{}\" ({})",
                                         id, pageRecord.getTitle(), file, duplicated.getTitle(), duplicated.getPath());
                             }

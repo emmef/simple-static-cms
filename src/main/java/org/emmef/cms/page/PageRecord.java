@@ -2,7 +2,6 @@ package org.emmef.cms.page;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.MultimapBuilder;
 import lombok.*;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
@@ -12,8 +11,6 @@ import org.w3c.dom.*;
 
 import javax.xml.stream.XMLStreamException;
 import javax.xml.transform.*;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import java.io.Writer;
 import java.nio.file.Path;
 import java.util.*;
@@ -21,7 +18,10 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 public class PageRecord {
-    private static final TransformerFactory tFactory = TransformerFactory.newInstance();
+    private static final String reservedChars = "|\\?*<:>+[]/";
+    private static final int MAX_NAME_LENGTH = 255;
+    private static final String HTML_SUFFIX = ".html";
+    private static final int MAX_GENERATED_LENGTH = MAX_NAME_LENGTH - HTML_SUFFIX.length();
 
     public static final Predicate<Node> META = NodeHelper.elementByNameCaseInsensitive("meta");
     public static final Predicate<Node> META_UUID = META.and(ByAttributeValue.literal("name", "scms-uuid", true));
@@ -37,6 +37,8 @@ public class PageRecord {
 
     public static final Predicate<Node> TITLE = NodeHelper.elementByNameCaseInsensitive("title");
     public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
+    public static final String NBSP = "" + Entities.NBSP;
+
 
     @NonNull
     @Getter
@@ -50,124 +52,76 @@ public class PageRecord {
     @Getter
     private final Path path;
     @NonNull
+    private final Document document;
+    @NonNull
     private final Node article;
+    @NonNull
+    private final Element footer;
     @NonNull
     private final Multimap<UUID, Node> pageRefNodes;
     @Getter
     private final boolean math;
     private final Element referenceList;
     @Getter
-    private boolean index;
+    private final boolean index;
 
     @Getter
     private PageRecord parent = null;
     private final SortedSet<PageRecord> children = createPageSet();
     private SortedSet<PageRecord> siblings = null;
     private String dynamicFilename = null;
+    private boolean duplicate = false;
+
+    public static final Comparator<PageRecord> COMPARATOR = (p1, p2) -> {
+        int i = p1.getTitle().compareToIgnoreCase(p2.getTitle());
+        if (i != 0) {
+            return i;
+        }
+        return p1.getId().hashCode() - p2.getId().hashCode();
+    };
 
     public static TreeSet<PageRecord> createPageSet() {
-        return new TreeSet<PageRecord>((p1, p2) -> {
-//            if (p1.getId().equals(p2.getId())) {
-//                return 0;
-//            }
-            int i = p1.getTitle().compareToIgnoreCase(p2.getTitle());
-            if (i != 0) {
-                return i;
-            }
-            return p1.getId().hashCode() - p2.getId().hashCode();
-        });
+        return new TreeSet<PageRecord>(COMPARATOR);
     }
 
-    private PageRecord(UUID id, @NonNull String title, UUID parentId, @NonNull Path path, @NonNull Node article, @NonNull Multimap<UUID, Node> pageRefNodes, boolean math, boolean isIndex, Element referenceList) {
-        this.id = id;
-        this.title = title;
-        this.parentId = parentId;
-        this.path = path;
-        this.article = article;
-        this.pageRefNodes = pageRefNodes;
-        this.math = math;
-        this.referenceList = referenceList;
-        this.index = isIndex;
-    }
+    private PageRecord(Document sourceDocument, Path path) {
+        Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
 
-    public static PageRecord create(Document document, Path path) {
-
-        Node head = getNodeByTag(document, "head", NodeExpectation.UNIQUE);
-
-        UUID id = getIdentifier(head, META_UUID, "page identifier", null);
-        String title = getTitle(head);
-        boolean math = Boolean.parseBoolean(getMetaValue(head, META_MATH));
-        boolean index = Boolean.parseBoolean(getMetaValue(head, META_INDEX));
-        UUID parentId = getIdentifier(head, META_PARENT_UUID, "parent identifier", NULL_PATTERN);
+        this.id = getIdentifier(head, META_UUID, "page identifier", null);
+        this.title = getTitle(head);
+        this.math = Boolean.parseBoolean(getMetaValue(head, META_MATH));
+        this.index = Boolean.parseBoolean(getMetaValue(head, META_INDEX));
+        this.parentId = getIdentifier(head, META_PARENT_UUID, "parent identifier", NULL_PATTERN);
 
         if (id.equals(parentId)) {
             throw new PageException("Page cannot be its own parent!");
         }
 
-        Node body = getNodeByTag(document, "body", NodeExpectation.UNIQUE);
+        Node body = getNodeByTag(sourceDocument, "body", NodeExpectation.UNIQUE);
         if (body == null) {
             throw new PageException("Page has no article!");
         }
-        Node article = document.createElement("article");
+
+        this.document = Documents.createDocument("html");
+        this.article = this.document.createElement("article");
+        this.footer = this.document.createElement("footer");
         NodeHelper.children(body).forEach(n -> {
-            article.appendChild(n.cloneNode(true));
+            Node imported = this.document.importNode(n, true);
+            article.appendChild(imported);
         });
 
         Multimap<UUID, Node> pageRefNodes = ArrayListMultimap.create();
 
-        Element referenceList = processReferences(document, article, pageRefNodes);
+        referenceList = processReferences(this.document, article, pageRefNodes);
 
         collectPageReferences(article, pageRefNodes);
 
-        return new PageRecord(id, title, parentId, path, article, pageRefNodes, math, index, referenceList);
+        this.path = path;
+        this.pageRefNodes = pageRefNodes;
     }
 
-    private static Element processReferences(Document document, Node article, Multimap<UUID, Node> pageRefNodes) {
-        List<String> references = new ArrayList<>();
-        Element referenceList = null;
-        for (Element refNode : NodeHelper.search(article, ANCHOR_REF, Element.class)) {
-            String reference = getReferenceValue(refNode, REF_SCHEME);
-            int idx = references.indexOf(reference);
-            if (idx == -1) {
-                idx = references.size();
-                references.add(reference);
-
-                Element anchor = document.createElement("a");
-                anchor.setAttribute("href", reference);
-                String textContent = refNode.getTextContent();
-                anchor.setTextContent(textContent != null && !textContent.isEmpty() ? textContent : reference);
-                UUID pageRef = reference.startsWith(PAGE_SCHEME) ? getUuidorNull(reference.substring(PAGE_SCHEME.length())) : null;
-                if (pageRef != null) {
-                    pageRefNodes.put(pageRef, anchor);
-                }
-
-                Element item = document.createElement("li");
-                item.setAttribute("class", "reference");
-                item.setAttribute("id", "reference_" + idx);
-                item.appendChild(anchor);
-
-                if (referenceList == null) {
-                    Element footer = document.createElement("footer");
-                    footer.setAttribute("class", "references");
-                    article.appendChild(footer);
-                    referenceList = document.createElement("ol");
-                    referenceList.setAttribute("class", "references");
-                    footer.appendChild(referenceList);
-                }
-                referenceList.appendChild(item);
-            }
-            refNode.setAttribute("href", "#reference_" + idx);
-            refNode.setTextContent("[" + (idx + 1) + "]");
-            refNode.setAttribute("class", "reference-ptr");
-        }
-        return referenceList;
-    }
-
-    private static void collectPageReferences(Node article, Multimap<UUID, Node> pageRefNodes) {
-        for (Node pageRef : NodeHelper.search(article, ANCHOR_PAGE)) {
-            UUID refId = getPageRefId(pageRef, PAGE_SCHEME);
-            pageRefNodes.put(refId, pageRef);
-        }
+    public static PageRecord create(Document document, Path path) {
+        return new PageRecord(document, path);
     }
 
     @Override
@@ -184,7 +138,7 @@ public class PageRecord {
                 NamedNodeMap attributes = n.getAttributes();
                 System.out.println("HREF" + attributes.getNamedItem("href").getNodeValue());
                 System.out.println(n.getParentNode().getNodeName());
-                attributes.getNamedItem("href").setNodeValue("./" + page.getDynamicFilename());
+                attributes.getNamedItem("href").setNodeValue(page.getDynamicFilename());
                 String content = n.getTextContent();
                 if (content == null || content.isEmpty()) {
                     n.setTextContent(refPageTitle);
@@ -227,6 +181,14 @@ public class PageRecord {
         return Collections.unmodifiableSortedSet(children);
     }
 
+    public boolean isDuplicate() {
+        return duplicate;
+    }
+
+    public void markDuplicate() {
+        duplicate = true;
+    }
+
     public List<PageRecord> getParents(boolean reverse) {
         List<PageRecord> list = new ArrayList<>();
         PageRecord parent = this.parent;
@@ -243,12 +205,169 @@ public class PageRecord {
         return list;
     }
 
+    public void writePage(Writer writer) throws TransformerException {
+        Element html = document.getDocumentElement();
+        addHead(html);
+        addBody(html);
+
+        Documents.writeDocument(writer, document);
+    }
+
+    private void addHead(Element html) {
+        Element head = addChild(html, "head");
+
+        addChild(head, "meta").setAttribute("charset", "UTF-8");
+        addSimpleChild(head, "link")
+                .attr("rel", "StyleSheet")
+                .attr("href", "./style/template-global.css")
+                .attr("type", "text/css");
+        if (math) {
+            addSimpleChild(head, "script")
+                    .attr("type", "text/javascript")
+                    .attr("src", "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML")
+                    .content("MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });");
+        }
+
+        StringBuilder output = new StringBuilder();
+        output.append(getTitle());
+
+        String title = generateTitleTrail(output);
+        addSimpleChild(head, "title").content(title);
+    }
+
+    private void addBody(Element html) {
+        Element body = addChild(html, "body");
+        Element nav = addChild(body, "nav");
+
+
+        List<PageRecord> parents = getParents(false);
+        List<PageRecord> self = Collections.singletonList(this);
+        List<PageRecord> siblings = new ArrayList<>();
+        getSiblings().forEach(p -> {
+            if (p != this) {
+                siblings.add(p);
+            }
+        });
+
+        ArrayList<PageRecord> children = new ArrayList<>(getChildren());
+
+        if (!parents.isEmpty()) {
+            writeLinks(null, nav, parents, "parents");
+        }
+        addPermaLink(nav);
+        writeLinks(this, nav, self, "current");
+        if (!children.isEmpty()) {
+            writeLinks(null, nav, children, "children");
+        }
+        writeLinks(null, nav, siblings, "siblings");
+
+        body.appendChild(article);
+        body.appendChild(footer);
+    }
+
+    private void addPermaLink(Element nav) {
+        String imageStyles = duplicate ? "permalink-disabled" : "permalink-enabled";
+
+        if (!duplicate) {
+            addSimpleChild(nav, "a")
+                    .attr("href", id.toString() + ".html")
+                    .attr("class", imageStyles)
+                    .attr("title", "Permanent link")
+                    .content("" + Entities.ODOT);
+        }
+        else {
+            addSimpleChild(nav, "span")
+                    .attr("class", imageStyles)
+                    .attr("title", "Permanent link")
+                    .content("" + Entities.ODOT);
+        }
+    }
+
+    private String generateTitleTrail(StringBuilder output) {
+        PageRecord parent = getParent();
+        if (parent != null) {
+            output.append(Entities.NBSP).append(Entities.MDASH).append(" ");
+            parentTitle(output, parent);
+        }
+
+        return output.toString();
+    }
+
+    private static void parentTitle(StringBuilder output, PageRecord page) {
+        PageRecord parent = page.getParent();
+        if (parent != null) {
+            parentTitle(output, parent);
+            output.append(Entities.NBSP).append("/ ");
+        }
+        output.append(page.getTitle());
+    }
+
+    private void writeLinks(PageRecord self, Element nav, List<PageRecord> pages, String baseClass) {
+        int size = pages.size();
+        if (size == 0) {
+            return;
+        }
+        for (int i = 0; i < size; i++) {
+            PageRecord page = pages.get(i);
+            boolean isFirst = i == 0;
+            boolean isLast = i == size - 1;
+            boolean isSelf = self != null && PageRecord.COMPARATOR.compare(page, self) == 0;
+
+            if (isFirst) {
+                addChild(nav, "span").setAttribute(
+                        "class", createClasses(
+                                baseClass, "separator", true, false, false));
+            }
+            addSimpleChild(nav, "a")
+                    .attr("href", page.getDynamicFilename())
+                    .attr("class", createClasses(baseClass, "element", isFirst, isLast, isSelf))
+                    .content(page.getTitle());
+
+            addChild(nav, "span").setAttribute(
+                    "class", createClasses(
+                            baseClass, "separator", false, isLast, false));
+        }
+    }
+
+    private String createClasses(String baseClass, String subClass, boolean isFirst, boolean isLast, boolean isSelf) {
+        StringBuilder classes = new StringBuilder();
+
+        classes.append(baseClass).append(" ").append(subClass).append(" ").append(baseClass).append("-").append(subClass);
+        if (isFirst) {
+            addPositionClasses(classes, baseClass, subClass, "first");
+        }
+        if (isLast) {
+            addPositionClasses(classes, baseClass, subClass, "last");
+        }
+        if (!isFirst && !isLast) {
+            addPositionClasses(classes, baseClass, subClass, "inner");
+        }
+        if (isSelf) {
+            addPositionClasses(classes, baseClass, subClass, "self");
+        }
+        return classes.toString();
+    }
+
+    private StringBuilder addPositionClasses(StringBuilder classes, String baseClass, String subClass, String position) {
+        return classes
+                .append(" ").append(baseClass).append("-").append(position)
+                .append(" ").append(subClass).append("-").append(position)
+                .append(" ").append(baseClass).append("-").append(subClass).append("-").append(position);
+    }
+
+
+    private Element addChild(Element parent, String tagName) {
+        Element element = document.createElement(tagName);
+        parent.appendChild(element);
+        return element;
+    }
+
+    private SimpleElement addSimpleChild(Element parent, String tagName) {
+        return new SimpleElement(addChild(parent, tagName));
+    }
+
     public void appendArticle(Writer writer) throws XMLStreamException, TransformerException {
-        DOMSource domSource = new DOMSource(article);
-        StreamResult out = new StreamResult(writer);
-        Transformer transformer = tFactory.newTransformer();
-        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-        transformer.transform(domSource, out);
+        Documents.writeDocument(writer, document);
     }
 
     public SortedSet<PageRecord> getSiblings() {
@@ -269,21 +388,13 @@ public class PageRecord {
         return parent == null && index;
     }
 
-    public void resetIndex() {
-        this.index = false;
-    }
-
-    private static final String reservedChars = "|\\?*<:>+[]/";
-    private static final int MAX_NAME_LENGTH = 255;
-    private static final String HTML_SUFFIX = ".html";
-    private static final int MAX_GENERATED_LENGTH = MAX_NAME_LENGTH - HTML_SUFFIX.length();
-
     public String getDynamicFilename() {
         if (dynamicFilename != null) {
             return dynamicFilename;
         }
         List<PageRecord> parents = getParents(true);
         StringBuilder name = new StringBuilder();
+        name.append("./");
         appendNormalized(name, title);
         if (!parents.isEmpty()) {
             parents.forEach(p -> {
@@ -307,6 +418,52 @@ public class PageRecord {
             dynamicFilename = name.toString();
         }
         return dynamicFilename;
+    }
+
+    private Element processReferences(Document document, Node article, Multimap<UUID, Node> pageRefNodes) {
+        List<String> references = new ArrayList<>();
+        Element referenceList = null;
+        for (Element refNode : NodeHelper.search(article, ANCHOR_REF, Element.class)) {
+            String reference = getReferenceValue(refNode, REF_SCHEME);
+            int idx = references.indexOf(reference);
+            if (idx == -1) {
+                idx = references.size();
+                references.add(reference);
+
+                Element anchor = document.createElement("a");
+                anchor.setAttribute("href", reference);
+                String textContent = refNode.getTextContent();
+                anchor.setTextContent(textContent != null && !textContent.isEmpty() ? textContent : reference);
+                UUID pageRef = reference.startsWith(PAGE_SCHEME) ? getUuidorNull(reference.substring(PAGE_SCHEME.length())) : null;
+                if (pageRef != null) {
+                    pageRefNodes.put(pageRef, anchor);
+                }
+
+                Element item = document.createElement("li");
+                item.setAttribute("class", "reference");
+                item.setAttribute("id", "reference_" + idx);
+                item.appendChild(anchor);
+
+                if (referenceList == null) {
+                    footer.setAttribute("class", "references");
+                    referenceList = document.createElement("ol");
+                    referenceList.setAttribute("class", "references");
+                    footer.appendChild(referenceList);
+                }
+                referenceList.appendChild(item);
+            }
+            refNode.setAttribute("href", "#reference_" + idx);
+            refNode.setTextContent("[" + (idx + 1) + "]");
+            refNode.setAttribute("class", "reference-ptr");
+        }
+        return referenceList;
+    }
+
+    private static void collectPageReferences(Node article, Multimap<UUID, Node> pageRefNodes) {
+        for (Node pageRef : NodeHelper.search(article, ANCHOR_PAGE)) {
+            UUID refId = getPageRefId(pageRef, PAGE_SCHEME);
+            pageRefNodes.put(refId, pageRef);
+        }
     }
 
 
@@ -351,14 +508,12 @@ public class PageRecord {
         }
     }
 
-
     private static String getTitle(Node head) {
         String title = getContent(head, TITLE);
         if (title == null || title.isEmpty()) {
             throw new PageException("Title must not be empty");
         }
-        title = title.trim();
-        return title;
+        return title.trim().replaceAll("\\s+", " ").replaceAll("\\s", NBSP);
     }
 
     private static UUID getIdentifier(@NonNull Node head, @NonNull Predicate<Node> predicate, @NonNull String description, Pattern nullPattern) {
@@ -413,21 +568,21 @@ public class PageRecord {
         return item;
     }
 
+    @RequiredArgsConstructor
+    private class SimpleElement {
+        @NonNull private final Element element;
 
-    @Getter
-    @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
-    @EqualsAndHashCode(exclude = {"caption"})
-    private static class RefOrPage {
-        private final String reference;
-        private final String caption;
-        private final UUID page;
-
-        public static RefOrPage page(@NonNull UUID page) {
-            return new RefOrPage(null, null, page);
+        public SimpleElement appendChild(Node node) {
+            element.appendChild(node);
+            return this;
         }
-
-        public static RefOrPage reference(@NonNull String reference, String caption) {
-            return new RefOrPage(reference, caption != null ? caption: reference, null);
+        public SimpleElement attr(String name, String value) {
+            element.setAttribute(name, value);
+            return this;
+        }
+        public SimpleElement content(String content) {
+            element.setTextContent(content);
+            return this;
         }
     }
 }
