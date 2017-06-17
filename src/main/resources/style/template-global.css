@@ -2,7 +2,7 @@
 
 @media screen {
 	* {
-		font-family: 'Open Sans', calibri, verdana, helvetica, sans-serif;
+		font-family: 'Open Sans', 'CommeRegular', calibri, verdana, sans-serif;
 	}
 
 	body {
@@ -42,7 +42,9 @@
     article a { font-weight: bold; }
     article { min-width: 15em; max-width: 60em; }
 
-    a.reference-ptr { font-size: 80%; font-style:italic; font-weight: bold; text-decoration: underline; }
+    a.reference-ptr { font-size: 82%; /* font-style:italic; */ font-weight: bold; background-color: #eee;}
+    a.reference-ptr::before { content: "["; }
+    a.reference-ptr::after { content: "]"; }
 
     .reference-list {
         margin:1.5ex 0.5ex 0.25ex 0.5ex;
