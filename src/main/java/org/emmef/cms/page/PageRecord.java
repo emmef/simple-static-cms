@@ -77,8 +77,8 @@ public class PageRecord {
     @Getter
     private final boolean math;
     private final Element referenceList;
-    @Getter
-    private final boolean index;
+//    @Getter
+    private boolean index;
 
     @Getter
     private PageRecord parent = null;
@@ -106,6 +106,9 @@ public class PageRecord {
         this.title = getTitle(head);
         this.math = Boolean.parseBoolean(getMetaValue(head, META_MATH));
         this.index = Boolean.parseBoolean(getMetaValue(head, META_INDEX));
+        if (index) {
+            System.out.println("INDEX " + title);
+        }
         this.parentId = getIdentifier(head, META_PARENT_UUID, "parent identifier", NULL_PATTERN);
 
         if (id.equals(parentId)) {
@@ -205,6 +208,10 @@ public class PageRecord {
         duplicate = true;
     }
 
+    public void resetIndex() {
+        index = false;
+    }
+
     public List<PageRecord> getParents(boolean reverse) {
         List<PageRecord> list = new ArrayList<>();
         PageRecord parent = this.parent;
@@ -219,6 +226,46 @@ public class PageRecord {
         }
 
         return list;
+    }
+
+    public void setSiblings(@NonNull SortedSet<PageRecord> siblings) {
+        this.siblings = Collections.unmodifiableSortedSet(siblings);
+    }
+
+    public boolean isIndex() {
+        return parent == null && index;
+    }
+
+    public String getDynamicFilename() {
+        if (dynamicFilename != null) {
+            return dynamicFilename;
+        }
+        List<PageRecord> parents = getParents(true);
+        StringBuilder name = new StringBuilder();
+        name.append("./");
+        appendNormalized(name, title);
+        if (!parents.isEmpty()) {
+            parents.forEach(p -> {
+                if (Character.isUpperCase(p.title.charAt(0))) {
+                    name.append("_-");
+                }
+                else {
+                    name.append("_-_");
+                }
+                appendNormalized(name, p.title);
+            });
+        }
+        if (name.length() > MAX_GENERATED_LENGTH) {
+            name.setLength(MAX_GENERATED_LENGTH);
+        };
+        name.append(".html");
+        if (name.charAt(0) == '_') {
+            dynamicFilename = name.substring(1);
+        }
+        else {
+            dynamicFilename = name.toString();
+        }
+        return dynamicFilename;
     }
 
     public void writePage(Writer writer) throws IOException {
@@ -237,8 +284,17 @@ public class PageRecord {
 
         addChild(head, "meta").attr("charset", "UTF-8");
         addSimpleChild(head, "link")
-                .attr("rel", "StyleSheet")
+                .attr("rel", "stylesheet")
                 .attr("href", "./style/template-global.css")
+                .attr("type", "text/css");
+//        addSimpleChild(head, "link")
+//                .attr("rel", "stylesheet")
+//                .attr("media", "screen")
+//                .attr("href", "https://fontlibrary.org/face/comme")
+//                .attr("type", "text/css");
+        addSimpleChild(head, "link")
+                .attr("rel", "stylesheet")
+                .attr("href", "http://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
                 .attr("type", "text/css");
         if (math) {
             addSimpleChild(head, "script")
@@ -393,46 +449,6 @@ public class PageRecord {
             return parent.getChildren();
         }
         return Collections.emptySortedSet();
-    }
-
-    public void setSiblings(@NonNull SortedSet<PageRecord> siblings) {
-        this.siblings = Collections.unmodifiableSortedSet(siblings);
-    }
-
-    public boolean isIndex() {
-        return parent == null && index;
-    }
-
-    public String getDynamicFilename() {
-        if (dynamicFilename != null) {
-            return dynamicFilename;
-        }
-        List<PageRecord> parents = getParents(true);
-        StringBuilder name = new StringBuilder();
-        name.append("./");
-        appendNormalized(name, title);
-        if (!parents.isEmpty()) {
-            parents.forEach(p -> {
-                if (Character.isUpperCase(p.title.charAt(0))) {
-                    name.append("_-");
-                }
-                else {
-                    name.append("_-_");
-                }
-                appendNormalized(name, p.title);
-            });
-        }
-        if (name.length() > MAX_GENERATED_LENGTH) {
-            name.setLength(MAX_GENERATED_LENGTH);
-        };
-        name.append(".html");
-        if (name.charAt(0) == '_') {
-            dynamicFilename = name.substring(1);
-        }
-        else {
-            dynamicFilename = name.toString();
-        }
-        return dynamicFilename;
     }
 
     private Element processReferences(Document document, Multimap<UUID, Element> pageRefNodes) {

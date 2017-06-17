@@ -31,7 +31,8 @@ public class TestBed {
                 SOURCE,
                 TARGET);
 
-        ParameterResults results = parameterReader.read(new String[] {"--source-root", "./src/main/resources", "--target", "/tmp/zaka"});
+        ParameterResults results = parameterReader.read(
+                new String[] {"--source-root", "./src/main/resources", "--target", "/tmp/zaka"});
 
         System.out.println(results);
 

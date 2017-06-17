@@ -10,6 +10,7 @@ import org.jsoup.nodes.Document;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -67,11 +68,24 @@ public class Pages {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            if (success && createPermanentFile) {
-                try {
-                    Files.copy(dynamicPath, permanentPath, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException e) {
-                    e.printStackTrace();
+            if (success) {
+                if (createPermanentFile) {
+                    try {
+                        Files.copy(dynamicPath, permanentPath, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+                String fileName = page.getPath().getFileName().toString();
+                boolean index = page.isIndex();
+                if (index && !"index.html".equalsIgnoreCase(fileName)) {
+                    try {
+                        Path resolve = target.resolve("index.html");
+                        System.out.println(resolve);
+                        Files.copy(dynamicPath, resolve, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         }
@@ -121,6 +135,7 @@ public class Pages {
 
     private static void collectPages(@NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, boolean processPages) throws IOException {
         List<Path> subDirectories = new ArrayList<>();
+        AtomicReference<Boolean> hadIndex = new AtomicReference<>(Boolean.FALSE);
         Files.list(source).forEach((file) -> {
             if (Files.isDirectory(file)) {
                 subDirectories.add(file);
@@ -134,19 +149,32 @@ public class Pages {
                         UUID id = pageRecord.getId();
                         if (collectedPages.containsKey(id)) {
                             PageRecord duplicated = collectedPages.get(id);
-                            if (pageRecord.getTitle().equalsIgnoreCase(duplicated.getTitle())) {
+                            if (pageRecord.isIndex() && !duplicated.isIndex()) {
+                                log.warn("Duplicate id and title '{}': page \"{}\" ({}) duplicates INDEX page \"{}\" ({})",
+                                        id, duplicated.getTitle(), duplicated.getPath(), pageRecord.getTitle(), file);
+                                duplicated.markDuplicate();
+                                duplicatePages.put(id, duplicated);
+                            }
+                            else if (pageRecord.getTitle().equalsIgnoreCase(duplicated.getTitle())) {
+                                pageRecord.resetIndex();
                                 log.warn("Duplicate id and title '{}': page \"{}\" ({}) duplicates page \"{}\" ({})",
                                         id, pageRecord.getTitle(), file, duplicated.getTitle(), duplicated.getPath());
+                                return;
                             }
                             else {
+                                pageRecord.resetIndex();
                                 duplicatePages.put(id, pageRecord);
                                 pageRecord.markDuplicate();
                                 log.error("Duplicate id '{}': page \"{}\" ({}) duplicates page \"{}\" ({})",
                                         id, pageRecord.getTitle(), file, duplicated.getTitle(), duplicated.getPath());
+                                return;
                             }
                         }
-                        else {
-                            collectedPages.put(pageRecord.getId(), pageRecord);
+                        collectedPages.put(pageRecord.getId(), pageRecord);
+                        if (pageRecord.isIndex()) {
+                            if (!hadIndex.compareAndSet(Boolean.FALSE, Boolean.TRUE)) {
+                                pageRecord.resetIndex();
+                            }
                         }
                     }
                     catch (PageException e) {
