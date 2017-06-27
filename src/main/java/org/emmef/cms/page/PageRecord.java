@@ -242,7 +242,6 @@ public class PageRecord {
         }
         List<PageRecord> parents = getParents(true);
         StringBuilder name = new StringBuilder();
-        name.append("./");
         appendNormalized(name, title);
         if (!parents.isEmpty()) {
             parents.forEach(p -> {
@@ -259,12 +258,15 @@ public class PageRecord {
             name.setLength(MAX_GENERATED_LENGTH);
         };
         name.append(".html");
-        if (name.charAt(0) == '_') {
-            dynamicFilename = name.substring(1);
+        int i = 0;
+        while (i < name.length() && name.charAt(i) == '_') {
+            i++;
         }
-        else {
-            dynamicFilename = name.toString();
-        }
+        name.delete(0,i);
+        name.insert(0, '/');
+        name.insert(0, '.');
+        dynamicFilename = name.toString();
+
         return dynamicFilename;
     }
 
@@ -337,7 +339,10 @@ public class PageRecord {
         writeLinks(null, nav, siblings, "siblings");
 
         body.appendChild(article);
-        body.appendChild(footer);
+
+        if (NodeHelper.searchFirst(footer, NodeHelper.elementByNameCaseInsensitive("tr")) != null) {
+            body.appendChild(footer);
+        }
     }
 
     private void addPermaLink(Element nav) {

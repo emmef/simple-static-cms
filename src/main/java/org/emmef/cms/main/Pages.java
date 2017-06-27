@@ -9,6 +9,10 @@ import org.jsoup.nodes.Document;
 
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -16,13 +20,14 @@ import java.util.regex.Pattern;
 @Slf4j
 public class Pages {
     private static final Pattern HTML_PATTERN = Pattern.compile("\\.html?$", Pattern.CASE_INSENSITIVE);
+    public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
 
     public static Pages readFrom(@NonNull Path source, @NonNull Path target) throws IOException {
         Map<UUID, PageRecord> collectedPages = new HashMap<>();
         Map<UUID, PageRecord> duplicatePages = new HashMap<>();
         List<Path> toCopy = new ArrayList<>();
 
-        collectPages(source, collectedPages, duplicatePages, toCopy, true);
+        collectPages(source, collectedPages, duplicatePages, toCopy, 3);
 
         createHierarchy(collectedPages);
         createRootSiblings(collectedPages.values(), duplicatePages.values());
@@ -47,6 +52,7 @@ public class Pages {
                     Files.createDirectories(dir);
                 }
                 Files.copy(file, destination, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                Files.setPosixFilePermissions(destination, ATTRIBUTES);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -61,7 +67,7 @@ public class Pages {
         boolean success = false;
         if (!collectedNames.contains(dynamicPath)) {
             try (FileWriter output = new FileWriter(dynamicPath.toFile())){
-                log.info("Wrote " + page);
+                log.info("Wrote " + page + " to file " + dynamicPath);
                 page.writePage(output);
                 success = true;
                 collectedNames.add(dynamicPath);
@@ -69,23 +75,29 @@ public class Pages {
                 e.printStackTrace();
             }
             if (success) {
-                if (createPermanentFile) {
-                    try {
-                        Files.copy(dynamicPath, permanentPath, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                try {
+                    Files.setPosixFilePermissions(dynamicPath, ATTRIBUTES);
+                    if (createPermanentFile) {
+                        try {
+                            Files.copy(dynamicPath, permanentPath, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    String fileName = dynamicPath.getFileName().toString();
+                    boolean index = page.isIndex();
+                    if (index && !"index.html".equalsIgnoreCase(fileName)) {
+                        try {
+                            Path resolve = target.resolve("index.html");
+                            Files.copy(dynamicPath, resolve, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                            Files.setPosixFilePermissions(resolve, ATTRIBUTES);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
-                String fileName = page.getPath().getFileName().toString();
-                boolean index = page.isIndex();
-                if (index && !"index.html".equalsIgnoreCase(fileName)) {
-                    try {
-                        Path resolve = target.resolve("index.html");
-                        System.out.println(resolve);
-                        Files.copy(dynamicPath, resolve, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         }
@@ -133,7 +145,7 @@ public class Pages {
         rootPages.forEach((root) -> root.setSiblings(rootPages));
     }
 
-    private static void collectPages(@NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, boolean processPages) throws IOException {
+    private static void collectPages(@NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels) throws IOException {
         List<Path> subDirectories = new ArrayList<>();
         AtomicReference<Boolean> hadIndex = new AtomicReference<>(Boolean.FALSE);
         Files.list(source).forEach((file) -> {
@@ -143,7 +155,7 @@ public class Pages {
             else {
                 String name = file.getFileName().toString();
 
-                if (processPages && HTML_PATTERN.matcher(name).find()) {
+                if (levels > 0 && HTML_PATTERN.matcher(name).find()) {
                     try {
                         PageRecord pageRecord = readFile(file);
                         UUID id = pageRecord.getId();
@@ -191,7 +203,7 @@ public class Pages {
         });
 
         for (Path subDir : subDirectories) {
-            collectPages(subDir, collectedPages, duplicatePages, toCopy, false);
+            collectPages(subDir, collectedPages, duplicatePages, toCopy, Math.max(levels - 1, 0));
         }
     }
 

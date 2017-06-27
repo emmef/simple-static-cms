@@ -23,6 +23,7 @@ public class TestBed {
     public static final Parameter HELP = Parameter.flag("help");
     public static final Parameter SOURCE = Parameter.single("source-root").withDescription("Contains the sources to generate pages from").mandatory().withShorthand("S");
     public static final Parameter TARGET = Parameter.single("target").withDescription("The output directory of pages").mandatory().withShorthand("T");
+    public static final String HOMEPAGE = "/home/michel/net/emmef.org/home/deb12377";
 
     public static void main(String arg[]) throws IOException, SAXException, ParserConfigurationException {
 
@@ -32,7 +33,8 @@ public class TestBed {
                 TARGET);
 
         ParameterResults results = parameterReader.read(
-                new String[] {"--source-root", "./src/main/resources", "--target", "/tmp/zaka"});
+                new String[] {"--source-root", HOMEPAGE + "/Site-source", "--target", HOMEPAGE + "/public_html"});
+//        new String[] {"--source-root", "./src/main/resources", "--target", "/tmp/zaka"});
 
         System.out.println(results);
 
