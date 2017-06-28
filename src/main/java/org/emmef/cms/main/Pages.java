@@ -9,8 +9,6 @@ import org.jsoup.nodes.Document;
 
 import java.io.*;
 import java.nio.file.*;
-import java.nio.file.attribute.FileAttribute;
-import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
@@ -27,7 +25,7 @@ public class Pages {
         Map<UUID, PageRecord> duplicatePages = new HashMap<>();
         List<Path> toCopy = new ArrayList<>();
 
-        collectPages(source, collectedPages, duplicatePages, toCopy, 3);
+        collectPages(source, source, collectedPages, duplicatePages, toCopy, 3);
 
         createHierarchy(collectedPages);
         createRootSiblings(collectedPages.values(), duplicatePages.values());
@@ -35,12 +33,13 @@ public class Pages {
         replacePageReferences(duplicatePages, collectedPages);
 
         Set<Path> collectedNames = new TreeSet<Path>();
+        Map<String,Object> cache = new HashMap<>();
 
         collectedPages.values().forEach((page) -> {
-            generatePageOutput(target, true, page, collectedNames);
+            generatePageOutput(target, true, page, collectedNames, cache);
         });
         duplicatePages.values().forEach((page) -> {
-            generatePageOutput(target, false, page, collectedNames);
+            generatePageOutput(target, false, page, collectedNames, cache);
         });
 
         toCopy.forEach(file -> {
@@ -61,14 +60,14 @@ public class Pages {
         return null;
     }
 
-    private static void generatePageOutput(@NonNull Path target, boolean createPermanentFile, @NonNull PageRecord page, Set<Path> collectedNames) {
+    private static void generatePageOutput(@NonNull Path target, boolean createPermanentFile, @NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache) {
         Path dynamicPath = target.resolve(page.getDynamicFilename());
         Path permanentPath = target.resolve(page.getId().toString() + ".html");
         boolean success = false;
         if (!collectedNames.contains(dynamicPath)) {
             try (FileWriter output = new FileWriter(dynamicPath.toFile())){
                 log.info("Wrote " + page + " to file " + dynamicPath);
-                page.writePage(output);
+                page.writePage(output, cache);
                 success = true;
                 collectedNames.add(dynamicPath);
             } catch (IOException e) {
@@ -145,7 +144,7 @@ public class Pages {
         rootPages.forEach((root) -> root.setSiblings(rootPages));
     }
 
-    private static void collectPages(@NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels) throws IOException {
+    private static void collectPages(Path rootPath, @NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels) throws IOException {
         List<Path> subDirectories = new ArrayList<>();
         AtomicReference<Boolean> hadIndex = new AtomicReference<>(Boolean.FALSE);
         Files.list(source).forEach((file) -> {
@@ -157,7 +156,7 @@ public class Pages {
 
                 if (levels > 0 && HTML_PATTERN.matcher(name).find()) {
                     try {
-                        PageRecord pageRecord = readFile(file);
+                        PageRecord pageRecord = readFile(rootPath, file);
                         UUID id = pageRecord.getId();
                         if (collectedPages.containsKey(id)) {
                             PageRecord duplicated = collectedPages.get(id);
@@ -203,7 +202,7 @@ public class Pages {
         });
 
         for (Path subDir : subDirectories) {
-            collectPages(subDir, collectedPages, duplicatePages, toCopy, Math.max(levels - 1, 0));
+            collectPages(rootPath, subDir, collectedPages, duplicatePages, toCopy, Math.max(levels - 1, 0));
         }
     }
 
@@ -211,16 +210,16 @@ public class Pages {
         collectedPages.values().forEach((page) -> page.replacePageReferences(index));
     }
 
-    private static PageRecord readFile(Path path) throws IOException {
+    private static PageRecord readFile(Path rootPath, Path path) throws IOException {
         try (InputStream fileStream = new FileInputStream(path.toFile())) {
-            return getPageRecordFromStream(fileStream, path);
+            return getPageRecordFromStream(rootPath, fileStream, path);
         }
 
     }
 
-    private static PageRecord getPageRecordFromStream(InputStream fileStream, Path path) throws IOException {
+    private static PageRecord getPageRecordFromStream(Path rootPath, InputStream fileStream, Path path) throws IOException {
         Document document = Jsoup.parse(fileStream, "UTF-8", "");
 
-        return new PageRecord(document, path);
+        return new PageRecord(document, path, rootPath);
     }
 }

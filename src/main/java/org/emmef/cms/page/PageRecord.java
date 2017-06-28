@@ -10,20 +10,15 @@ import org.emmef.cms.util.NodeHelper;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
 import org.jsoup.nodes.Document;
-import org.jsoup.parser.Tag;
 import org.jsoup.select.Elements;
-import org.w3c.dom.NodeList;
 
-import javax.swing.text.html.HTML;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.transform.*;
 import java.io.IOException;
 import java.io.Writer;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -51,7 +46,7 @@ public class PageRecord {
     public static final Predicate<Element> TITLE = NodeHelper.elementByNameCaseInsensitive("title");
     public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
     public static final String NBSP = "" + Entities.NBSP;
-
+    public static final String STYLE_CSS = "./style/simple-static-cms.css";
 
     @NonNull
     @Getter
@@ -66,6 +61,9 @@ public class PageRecord {
     @NonNull
     @Getter
     private final Path path;
+    @NonNull
+    @Getter
+    private final Path rootPath;
     @NonNull
     private final Document document;
     @NonNull
@@ -99,7 +97,7 @@ public class PageRecord {
         return new TreeSet<PageRecord>(COMPARATOR);
     }
 
-    public PageRecord(Document sourceDocument, Path path) {
+    public PageRecord(Document sourceDocument, Path path, Path rootPath) {
         Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
 
         this.id = getIdentifier(head, META_UUID, "page identifier", null);
@@ -119,8 +117,6 @@ public class PageRecord {
         if (sourceBody == null) {
             throw new PageException("Page has no article!");
         }
-
-
 
         this.document = Jsoup.parse("<!DOCTYPE html><html></html>");
         this.header = this.document.createElement("header");
@@ -145,6 +141,13 @@ public class PageRecord {
 
         this.path = path;
         this.pageRefNodes = pageRefNodes;
+        try {
+            rootPath.relativize(path);
+        }
+        catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(this + ": path not relative to root-path " + rootPath);
+        }
+        this.rootPath = rootPath;
     }
 
     @Override
@@ -270,34 +273,58 @@ public class PageRecord {
         return dynamicFilename;
     }
 
-    public void writePage(Writer writer) throws IOException {
-        addHead();
+    public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache) throws IOException {
+        addHead(cache);
         addBody();
 
         Document.OutputSettings outputSettings = document.outputSettings();
         outputSettings.charset(StandardCharsets.UTF_8);
         outputSettings.escapeMode(org.jsoup.nodes.Entities.EscapeMode.base);
         writer.append(document.outerHtml());
-
     }
 
-    private void addHead() {
+    private void addHead(@NonNull Map<String, Object> cache) {
         Element head = document.head();
 
         addChild(head, "meta").attr("charset", "UTF-8");
-        addSimpleChild(head, "link")
-                .attr("rel", "stylesheet")
-                .attr("href", "./style/template-global.css")
-                .attr("type", "text/css");
-//        addSimpleChild(head, "link")
-//                .attr("rel", "stylesheet")
-//                .attr("media", "screen")
-//                .attr("href", "https://fontlibrary.org/face/comme")
-//                .attr("type", "text/css");
+        // 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2, minimum-scale=0.6"/>
+
+        addChild(head, "meta")
+                .attr("name", "viewport")
+                .attr("content", "width=device-width, initial-scale=1.0, maximum-scale=2, minimum-scale=0.5");
+
+        Object style = cache.computeIfAbsent(STYLE_CSS, (s) -> {
+            Path styleSheetFile = rootPath.resolve(STYLE_CSS);
+            if (Files.exists(styleSheetFile) && Files.isReadable(styleSheetFile)) {
+                try {
+                    System.out.println("Reading stylesheet for inlining...");
+                    StringBuilder builder = new StringBuilder();
+                    builder.append("\n");
+                    for (String line : Files.readAllLines(styleSheetFile, StandardCharsets.UTF_8)) {
+                        if (!line.trim().isEmpty()) {
+                            builder.append(line).append("\n");
+                        }
+                    }
+                    return builder.toString();
+                } catch (IOException e) {
+                    // FALLTHROUGH
+                }
+            }
+            return Boolean.FALSE;
+        });
         addSimpleChild(head, "link")
                 .attr("rel", "stylesheet")
                 .attr("href", "http://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
                 .attr("type", "text/css");
+        if (style instanceof String) {
+            addChild(head, "style").appendChild(new DataNode((String)style, ""));
+        }
+        else {
+            addSimpleChild(head, "link")
+                    .attr("rel", "stylesheet")
+                    .attr("href", STYLE_CSS)
+                    .attr("type", "text/css");
+        }
         if (math) {
             addSimpleChild(head, "script")
                     .attr("type", "text/javascript")
@@ -340,7 +367,7 @@ public class PageRecord {
 
         body.appendChild(article);
 
-        if (NodeHelper.searchFirst(footer, NodeHelper.elementByNameCaseInsensitive("tr")) != null) {
+        if (footer.children().size() != 0) {
             body.appendChild(footer);
         }
     }
@@ -458,9 +485,7 @@ public class PageRecord {
 
     private Element processReferences(Document document, Multimap<UUID, Element> pageRefNodes) {
         List<String> references = new ArrayList<>();
-        Element referenceList  = addSimpleChild(footer,"table")
-                .attr("class", "reference reference-list")
-                .getElement();
+        AtomicReference<Element> referenceList = new AtomicReference<>();
 
         NodeHelper.search(article, ANCHOR_REF, Element.class, refNode -> {
             String referenceUrl = getReferenceValue(refNode, REF_SCHEME);
@@ -481,7 +506,13 @@ public class PageRecord {
                 number = Integer.toString(references.size());
                 refId = "scms_reference_" + number;
 
-                Element reference = addSimpleChild(referenceList, "tr")
+                if (referenceList.get() == null) {
+                    referenceList.set(
+                            addSimpleChild(footer,"table")
+                                    .attr("class", "reference reference-list")
+                                    .getElement());
+                }
+                Element reference = addSimpleChild(referenceList.get(), "tr")
                         .attr("class", "reference reference-item")
                         .attr("id", refId).getElement();
 
@@ -516,7 +547,7 @@ public class PageRecord {
             refNode.text(number);
             refNode.attr("class", "reference-ptr");
         });
-        return referenceList;
+        return referenceList.get();
     }
 
     private static void collectPageReferences(Node article, Multimap<UUID, Element> pageRefNodes) {
