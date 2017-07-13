@@ -3,6 +3,7 @@ package org.emmef.cms.page;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
 import org.emmef.cms.util.ByAttributeValue;
@@ -17,11 +18,14 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
+@Slf4j
 public class PageRecord {
     private static final String reservedChars = "|\\?*<:>+[]/";
     private static final int MAX_NAME_LENGTH = 255;
@@ -47,6 +51,9 @@ public class PageRecord {
     public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
     public static final String NBSP = "" + Entities.NBSP;
     public static final String STYLE_CSS = "./style/simple-static-cms.css";
+    public static final String PAGE_COPYRIGHT = "copyright";
+    public static final String REFERENCE_LIST = "reference-list";
+    public static final String NOTE_NUMBER = "note-number";
 
     @NonNull
     @Getter
@@ -84,6 +91,8 @@ public class PageRecord {
     private SortedSet<PageRecord> siblings = null;
     private String dynamicFilename = null;
     private boolean duplicate = false;
+    private final FileTime timeModified;
+    private final FileTime timeCreated;
 
     public static final Comparator<PageRecord> COMPARATOR = (p1, p2) -> {
         int i = p1.getTitle().compareToIgnoreCase(p2.getTitle());
@@ -93,13 +102,15 @@ public class PageRecord {
         return p1.getId().hashCode() - p2.getId().hashCode();
     };
 
+    public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm'GMT'");
+
     public static TreeSet<PageRecord> createPageSet() {
         return new TreeSet<PageRecord>(COMPARATOR);
     }
 
     public PageRecord(Document sourceDocument, Path path, Path rootPath) {
         Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
-
+        FileTime modifiedTime;
         this.id = getIdentifier(head, META_UUID, "page identifier", null);
         this.title = getTitle(head);
         this.math = Boolean.parseBoolean(getMetaValue(head, META_MATH));
@@ -134,8 +145,11 @@ public class PageRecord {
         });
 
         Multimap<UUID, Element> pageRefNodes = ArrayListMultimap.create();
-
-        referenceList = processReferences(this.document, pageRefNodes);
+        List<String> references = new ArrayList<>();
+        referenceList = processReferences(article, pageRefNodes, references);
+        if (referenceList != null) {
+            notes.values().forEach(n -> { processReferences(n, pageRefNodes, references); });
+        }
 
         collectPageReferences(article, pageRefNodes);
 
@@ -148,6 +162,32 @@ public class PageRecord {
             throw new IllegalArgumentException(this + ": path not relative to root-path " + rootPath);
         }
         this.rootPath = rootPath;
+        this.timeModified = getFileLastModified(path);
+        this.timeCreated = getCreationTime(path);
+    }
+
+    private FileTime getFileLastModified(Path path) {
+        FileTime time;
+        try {
+            time = Files.getLastModifiedTime(path);
+            Files.getAttribute(path, "creationTime");
+        } catch (IOException e) {
+            time = FileTime.fromMillis(System.currentTimeMillis());
+            log.warn("Cannot determine modified time {}", this);
+        }
+        return time;
+    }
+
+    private FileTime getCreationTime(Path path) {
+        FileTime time;
+        try {
+            time = (FileTime) Files.getAttribute(path, "creationTime");
+
+        } catch (IOException | UnsupportedOperationException | ClassCastException e) {
+            time = FileTime.fromMillis(System.currentTimeMillis());
+            log.warn("Cannot determine creation time for {}", this);
+        }
+        return time;
     }
 
     @Override
@@ -275,7 +315,7 @@ public class PageRecord {
 
     public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache) throws IOException {
         addHead(cache);
-        addBody();
+        addBody((String)cache.get(PAGE_COPYRIGHT));
 
         Document.OutputSettings outputSettings = document.outputSettings();
         outputSettings.charset(StandardCharsets.UTF_8);
@@ -339,7 +379,7 @@ public class PageRecord {
         addSimpleChild(head, "title").content(title);
     }
 
-    private void addBody() {
+    private void addBody(String copyRight) {
         Element body = document.body();
         body.appendChild(header);
         Element nav = addChild(header, "nav");
@@ -367,6 +407,7 @@ public class PageRecord {
 
         body.appendChild(article);
 
+        addDateAndCopyright(copyRight);
         if (footer.children().size() != 0) {
             body.appendChild(footer);
         }
@@ -483,15 +524,14 @@ public class PageRecord {
         return Collections.emptySortedSet();
     }
 
-    private Element processReferences(Document document, Multimap<UUID, Element> pageRefNodes) {
-        List<String> references = new ArrayList<>();
-        AtomicReference<Element> referenceList = new AtomicReference<>();
+    private Element processReferences(Node rootNode, Multimap<UUID, Element> pageRefNodes, List<String> references) {
+        AtomicReference<Element> referenceList = new AtomicReference<>(footer.getElementById(REFERENCE_LIST));
 
-        NodeHelper.search(article, ANCHOR_REF, Element.class, refNode -> {
+        NodeHelper.search(rootNode, ANCHOR_REF, Element.class, refNode -> {
             String referenceUrl = getReferenceValue(refNode, REF_SCHEME);
             int idx = references.indexOf(referenceUrl);
-            String number;
-            String refId;
+            String number = null;
+            String refId = null;
             if (idx == -1) {
                 Element note = null;
                 if (referenceUrl.startsWith(NOTE_SCHEME)) {
@@ -501,15 +541,15 @@ public class PageRecord {
                         return;
                     }
                 }
-                idx = references.size();
                 references.add(referenceUrl);
+
                 number = Integer.toString(references.size());
                 refId = "scms_reference_" + number;
-
                 if (referenceList.get() == null) {
                     referenceList.set(
-                            addSimpleChild(footer,"table")
+                            addSimpleChild(footer, "table")
                                     .attr("class", "reference reference-list")
+                                    .attr("id", REFERENCE_LIST)
                                     .getElement());
                 }
                 Element reference = addSimpleChild(referenceList.get(), "tr")
@@ -537,7 +577,6 @@ public class PageRecord {
                     note.attr("class", "reference reference-item-content-link");
                     content.appendChild(note);
                 }
-
             } else {
                 number = Integer.toString(idx + 1);
                 refId = "scms_reference_" + number;
@@ -556,6 +595,36 @@ public class PageRecord {
             UUID refId = getPageRefId(pageRef, PAGE_SCHEME);
             pageRefNodes.put(refId, pageRef);
         });
+    }
+
+    private void addDateAndCopyright(String copyRight) {
+        Element fileData = addChild(footer, "div").attr("class", "file-data");
+
+        fileData.appendElement("span").attr("class", "source-modification").text(DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified.toMillis()).toZonedDateTime()));
+        if (copyRight != null) {
+            String years;
+            int yearCreated = getGMTYear(timeCreated.toMillis());
+            int yearModified = getGMTYear(timeModified.toMillis());
+            if (yearCreated >= yearModified) {
+                years = String.format("%04d", yearModified);
+            }
+            else {
+                years = String.format("%04d\u2013%04d", yearCreated, yearModified);
+            }
+            fileData.appendElement("span").attr("class", "source-copyright")
+                        .text(String.format("\u00a9\u00a0%s\u00a0%s.", years, copyRight.replaceAll("\\s", "\u00a0")));
+        }
+    }
+
+    private int getGMTYear(long millis) {
+        GregorianCalendar calendar = getCalendarInGMT(millis);
+        return calendar.get(Calendar.YEAR);
+    }
+
+    private GregorianCalendar getCalendarInGMT(long millis) {
+        GregorianCalendar calendar = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
+        calendar.setTimeInMillis(millis);
+        return calendar;
     }
 
 

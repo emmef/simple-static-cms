@@ -23,6 +23,7 @@ public class TestBed {
     public static final Parameter HELP = Parameter.flag("help");
     public static final Parameter SOURCE = Parameter.single("source-root").withDescription("Contains the sources to generate pages from").mandatory().withShorthand("S");
     public static final Parameter TARGET = Parameter.single("target").withDescription("The output directory of pages").mandatory().withShorthand("T");
+    public static final Parameter COPYRIGHT = Parameter.single("copyright").withDescription("Copyright holder").withShorthand("C");
     public static final String HOMEPAGE = "/home/michel/net/emmef.org";
 //                                         /home/michel/net/emmef.org/Site-source
     public static void main(String arg[]) throws IOException, SAXException, ParserConfigurationException {
@@ -30,10 +31,11 @@ public class TestBed {
         ParameterReader parameterReader = new ParameterReader(ExtraArgumentStrategy.ALLOW_BOTH,
                 HELP,
                 SOURCE,
-                TARGET);
+                TARGET,
+                COPYRIGHT);
 
         ParameterResults results = parameterReader.read(
-                new String[] {"--source-root", HOMEPAGE + "/Site-source", "--target", HOMEPAGE + "/public_html"});
+                new String[] {"--source-root", HOMEPAGE + "/Site-source", "--target", HOMEPAGE + "/public_html", "--copyright", "Michel Fleur"});
 //        new String[] {"--source-root", "./src/main/resources", "--target", "/tmp/zaka"});
 
         System.out.println(results);
@@ -42,6 +44,7 @@ public class TestBed {
 
         Path source = FileSystems.getDefault().getPath(results.getValue(SOURCE));
         Path target = FileSystems.getDefault().getPath(results.getValue(TARGET));
+        String copyRight = results.getValue(COPYRIGHT);
 
         if (!Files.exists(source) || !Files.isDirectory(source)) {
             throw new IllegalArgumentException("Source directory not exist: " + source.toString());
@@ -55,6 +58,6 @@ public class TestBed {
             Files.createDirectory(target, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
         }
 
-        Pages pages = Pages.readFrom(source, target);
+        Pages pages = Pages.readFrom(source, target, copyRight);
     }
 }
