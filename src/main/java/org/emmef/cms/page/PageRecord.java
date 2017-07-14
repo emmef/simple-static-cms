@@ -145,11 +145,8 @@ public class PageRecord {
         });
 
         Multimap<UUID, Element> pageRefNodes = ArrayListMultimap.create();
-        List<String> references = new ArrayList<>();
-        referenceList = processReferences(article, pageRefNodes, references);
-        if (referenceList != null) {
-            notes.values().forEach(n -> { processReferences(n, pageRefNodes, references); });
-        }
+
+        referenceList = collectReferences(pageRefNodes);
 
         collectPageReferences(article, pageRefNodes);
 
@@ -164,6 +161,27 @@ public class PageRecord {
         this.rootPath = rootPath;
         this.timeModified = getFileLastModified(path);
         this.timeCreated = getCreationTime(path);
+    }
+
+    private Element collectReferences(Multimap<UUID, Element> pageRefNodes) {
+        List<String> referencesUrls = new ArrayList<>();
+        Element referencesElement = processReferences(article, pageRefNodes, referencesUrls);
+
+        if (referencesElement != null) {
+            Set<String> hadNotes = new HashSet<>();
+            int previousResolved = 0;
+            while (referencesUrls.size() != previousResolved) {
+                previousResolved = referencesUrls.size();
+
+                notes.forEach((url, n) -> {
+                    if (!hadNotes.contains(url) && referencesUrls.contains(NOTE_SCHEME + n.id())) {
+                        processReferences(n, pageRefNodes, referencesUrls);
+                        hadNotes.add(url);
+                    }
+                });
+            }
+        }
+        return referencesElement;
     }
 
     private FileTime getFileLastModified(Path path) {
@@ -542,7 +560,6 @@ public class PageRecord {
                     }
                 }
                 references.add(referenceUrl);
-
                 number = Integer.toString(references.size());
                 refId = "scms_reference_" + number;
                 if (referenceList.get() == null) {
