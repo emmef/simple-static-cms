@@ -20,7 +20,7 @@ public class Pages {
     private static final Pattern HTML_PATTERN = Pattern.compile("\\.html?$", Pattern.CASE_INSENSITIVE);
     public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
 
-    public static Pages readFrom(@NonNull Path source, @NonNull Path target, String copyRight) throws IOException {
+    public static Pages readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight) throws IOException {
         Map<UUID, PageRecord> collectedPages = new HashMap<>();
         Map<UUID, PageRecord> duplicatePages = new HashMap<>();
         List<Path> toCopy = new ArrayList<>();
