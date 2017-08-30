@@ -51,6 +51,7 @@ public class PageRecord {
     public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
     public static final String NBSP = "" + Entities.NBSP;
     public static final String STYLE_CSS = "./style/simple-static-cms.css";
+    public static final String CSS_TARGET_TYPE = "simple-static-cms-style-type";
     public static final String PAGE_COPYRIGHT = "copyright";
     public static final String REFERENCE_LIST = "reference-list";
     public static final String NOTE_NUMBER = "note-number";
@@ -352,23 +353,25 @@ public class PageRecord {
                 .attr("content", "width=device-width, initial-scale=1.0, maximum-scale=2, minimum-scale=0.5");
 
         Object style = cache.computeIfAbsent(STYLE_CSS, (s) -> {
-            Path styleSheetFile = rootPath.resolve(STYLE_CSS);
-            if (Files.exists(styleSheetFile) && Files.isReadable(styleSheetFile)) {
-                try {
-                    System.out.println("Reading stylesheet for inlining...");
-                    StringBuilder builder = new StringBuilder();
-                    builder.append("\n");
-                    for (String line : Files.readAllLines(styleSheetFile, StandardCharsets.UTF_8)) {
-                        if (!line.trim().isEmpty()) {
-                            builder.append(line).append("\n");
+            if ("inline".equals(cache.get(CSS_TARGET_TYPE))) {
+                Path styleSheetFile = rootPath.resolve(STYLE_CSS);
+                if (Files.exists(styleSheetFile) && Files.isReadable(styleSheetFile)) {
+                    try {
+                        System.out.println("Reading stylesheet for inlining...");
+                        StringBuilder builder = new StringBuilder();
+                        builder.append("\n");
+                        for (String line : Files.readAllLines(styleSheetFile, StandardCharsets.UTF_8)) {
+                            if (!line.trim().isEmpty()) {
+                                builder.append(line).append("\n");
+                            }
                         }
+                        return builder.toString();
+                    } catch (IOException e) {
+                        // FALLTHROUGH
                     }
-                    return builder.toString();
-                } catch (IOException e) {
-                    // FALLTHROUGH
                 }
             }
-            return Boolean.FALSE;
+            return System.currentTimeMillis();
         });
         addSimpleChild(head, "link")
                 .attr("rel", "stylesheet")
@@ -380,7 +383,7 @@ public class PageRecord {
         else {
             addSimpleChild(head, "link")
                     .attr("rel", "stylesheet")
-                    .attr("href", STYLE_CSS)
+                    .attr("href", STYLE_CSS + "?stamp=" + style)
                     .attr("type", "text/css");
         }
         if (math) {
@@ -390,11 +393,7 @@ public class PageRecord {
                     .getElement().appendChild(new DataNode("MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });", ""));
         }
 
-        StringBuilder output = new StringBuilder();
-        output.append(getTitle());
-
-        String title = generateTitleTrail(output);
-        addSimpleChild(head, "title").content(title);
+        addSimpleChild(head, "title").content(generateTitleTrail());
     }
 
     private void addBody(String copyRight) {
@@ -423,6 +422,10 @@ public class PageRecord {
         }
         writeLinks(null, nav, siblings, "siblings");
 
+        header.appendElement("div")
+                .attr("id", "article-title")
+                .text(generateTitleTrail());
+
         body.appendChild(article);
 
         addDateAndCopyright(copyRight);
@@ -449,7 +452,10 @@ public class PageRecord {
         }
     }
 
-    private String generateTitleTrail(StringBuilder output) {
+    private String generateTitleTrail() {
+        StringBuilder output = new StringBuilder();
+        output.append(getTitle());
+
         PageRecord parent = getParent();
         if (parent != null) {
             output.append(Entities.NBSP).append(Entities.MDASH).append(" ");
@@ -564,10 +570,12 @@ public class PageRecord {
                 refId = "scms_reference_" + number;
                 if (referenceList.get() == null) {
                     referenceList.set(
-                            addSimpleChild(footer, "table")
-                                    .attr("class", "reference reference-list")
-                                    .attr("id", REFERENCE_LIST)
-                                    .getElement());
+                            addSimpleChild(footer, "div")
+                                    .attr("class", "reference references")
+                                    .getElement()
+                                    .appendElement("table")
+                                        .attr("class", "reference reference-list")
+                                        .attr("id", REFERENCE_LIST));
                 }
                 Element reference = addSimpleChild(referenceList.get(), "tr")
                         .attr("class", "reference reference-item")
