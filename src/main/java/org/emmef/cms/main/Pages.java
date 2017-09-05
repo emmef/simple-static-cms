@@ -1,5 +1,7 @@
 package org.emmef.cms.main;
 
+import com.google.common.collect.ImmutableList;
+import jdk.nashorn.internal.ir.annotations.Immutable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.page.PageException;
@@ -29,8 +31,11 @@ public class Pages {
 
         createHierarchy(collectedPages);
         createRootSiblings(collectedPages.values(), duplicatePages.values());
+        List<PageRecord> orderedPages = createOrderedPages(collectedPages.values());
         replacePageReferences(collectedPages, collectedPages);
         replacePageReferences(duplicatePages, collectedPages);
+
+        replaceLastArticlesReferences(collectedPages.values(), orderedPages);
 
         Set<Path> collectedNames = new TreeSet<Path>();
         Map<String,Object> cache = new HashMap<>();
@@ -146,6 +151,22 @@ public class Pages {
         rootPages.forEach((root) -> root.setSiblings(rootPages));
     }
 
+    private static List<PageRecord> createOrderedPages(Collection<PageRecord> pages)
+    {
+        long mostRecentCreated = 0;
+        long mostRecentModified = 0;
+        List<PageRecord> result = new ArrayList<>();
+        for (PageRecord page : pages) {
+            mostRecentCreated = Math.max(page.getTimeCreated().toMillis(), mostRecentCreated);
+            mostRecentModified = Math.max(page.getTimeModified().toMillis(), mostRecentModified);
+            result.add(page);
+        }
+        Comparator<PageRecord> comparator = PageRecord.createDateComparator(mostRecentCreated, mostRecentModified);
+        Collections.sort(result, comparator);
+        return ImmutableList.copyOf(result);
+    }
+
+
     private static void collectPages(Path rootPath, @NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels) throws IOException {
         List<Path> subDirectories = new ArrayList<>();
         AtomicReference<Boolean> hadIndex = new AtomicReference<>(Boolean.FALSE);
@@ -210,6 +231,10 @@ public class Pages {
 
     private static void replacePageReferences(Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> index) {
         collectedPages.values().forEach((page) -> page.replacePageReferences(index));
+    }
+
+    private static void replaceLastArticlesReferences(Collection<PageRecord> pages, List<PageRecord> sortedPages) {
+        pages.forEach((page) -> page.replaceLastArticlesReference(sortedPages));
     }
 
     private static PageRecord readFile(Path rootPath, Path path) throws IOException {

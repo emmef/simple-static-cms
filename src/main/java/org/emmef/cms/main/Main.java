@@ -18,7 +18,6 @@ public class Main {
     public static final Parameter SOURCE = Parameter.single("source-root").withDescription("Contains the sources to generate pages from").mandatory().withShorthand("S");
     public static final Parameter TARGET = Parameter.single("target").withDescription("The output directory of pages").mandatory().withShorthand("T");
     public static final Parameter COPYRIGHT = Parameter.single("copyright").withDescription("Copyright holder").withShorthand("C");
-    public static final String HOMEPAGE = "/home/michel/net/emmef.org";
 
     ParameterReader parameterReader = new ParameterReader(ExtraArgumentStrategy.ALLOW_BOTH,
             HELP,

@@ -7,17 +7,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
 import org.emmef.cms.util.ByAttributeValue;
+import org.emmef.cms.util.GetFirst;
 import org.emmef.cms.util.NodeHelper;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
+import org.jsoup.select.NodeVisitor;
 
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -36,6 +39,12 @@ public class PageRecord {
     public static final String REF_SCHEME = "ref:";
     public static final String NOTE_SCHEME = "note:";
     public static final String NOTE_ELEMENT = "aside";
+    public static final String SUMMARY_ELEMENT = "p";
+    public static final String SUMMARY_ID = "article-summary";
+    public static final String SUMMARY_TITLE_ELEMENT = "h1";
+    public static final String SUMMARY_TITLE_ID = "article-summary-title";
+    public static final String LATEST_ARTICLE_ELEMENT = "section";
+    public static final String LATEST_ARTICLE_ID = "latest-articles";
 
     public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive("meta");
     public static final Predicate<Element> META_UUID = META.and(ByAttributeValue.literal("name", "scms-uuid", true));
@@ -64,6 +73,9 @@ public class PageRecord {
     private final String title;
     private final Element header;
     private final Map<String, Element> notes = new HashMap<>();
+    private final Element latestArticlesElement;
+    @Getter
+    private final String summaryTitle;
     @Getter
     private UUID parentId;
     @NonNull
@@ -76,6 +88,7 @@ public class PageRecord {
     private final Document document;
     @NonNull
     private final Element article;
+    private List<Node> summary;
     @NonNull
     private final Element footer;
     @NonNull
@@ -92,21 +105,40 @@ public class PageRecord {
     private SortedSet<PageRecord> siblings = null;
     private String dynamicFilename = null;
     private boolean duplicate = false;
+    @Getter
     private final FileTime timeModified;
+    @Getter
     private final FileTime timeCreated;
 
-    public static final Comparator<PageRecord> COMPARATOR = (p1, p2) -> {
-        int i = p1.getTitle().compareToIgnoreCase(p2.getTitle());
+    public static final Comparator<PageRecord> COMPARE_BY_NAME = (p1, p2) -> {
+        int i = p1.title.compareToIgnoreCase(p2.title);
         if (i != 0) {
             return i;
         }
-        return p1.getId().hashCode() - p2.getId().hashCode();
+        return p1.id.hashCode() - p2.id.hashCode();
     };
+
+    public static final Comparator<PageRecord> createDateComparator(long mostRecentCreated, long mostRecentModified) {
+        return new Comparator<PageRecord>() {
+            @Override
+            public int compare(PageRecord p1, PageRecord p2) {
+                double createP1 = Math.log(Math.max(1, mostRecentCreated - p1.timeCreated.toMillis()));
+                double createP2 = Math.log(Math.max(1, mostRecentCreated - p2.timeCreated.toMillis()));
+                double createValue = createP1 - createP2;
+                double modP1 = Math.log(Math.max(1, mostRecentModified - p1.timeModified.toMillis()));
+                double modP2 = Math.log(Math.max(1, mostRecentModified - p2.timeModified.toMillis()));
+                double modValue = modP1 - modP2;
+
+                double value = createValue * 2 + modValue;
+                return value < 0 ? -1 : value > 0 ? 1 : p1.id.hashCode() - p2.id.hashCode();
+            }
+        };
+    }
 
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm'GMT'");
 
     public static TreeSet<PageRecord> createPageSet() {
-        return new TreeSet<PageRecord>(COMPARATOR);
+        return new TreeSet<PageRecord>(COMPARE_BY_NAME);
     }
 
     public PageRecord(Document sourceDocument, Path path, Path rootPath) {
@@ -134,16 +166,29 @@ public class PageRecord {
         this.header = this.document.createElement("header");
         this.article = this.document.createElement("article");
         this.footer = this.document.createElement("footer");
+        GetFirst<Element> latestArticleRef = new GetFirst<>();
+        GetFirst<String> summaryTitleRef = new GetFirst<>();
         NodeHelper.children(sourceBody).forEach(sourceNode -> {
             Node clone = sourceNode.clone();
-            Element note = getNoteElementOrNull(clone);
+            Element note = getAcceptedTagElementOrNull(clone, NOTE_ELEMENT, (e) -> {
+                String id = e.attr("id");
+                return id != null && !id.isEmpty();
+            });
+
             if (note != null) {
                 this.notes.put(note.attr("id"), note);
+                return;
             }
-            else {
-                article.appendChild(clone);
+            Element st = getAcceptedTagAndIdElementOrNull(clone, SUMMARY_TITLE_ELEMENT, SUMMARY_TITLE_ID);
+            if (st != null) {
+                summaryTitleRef.accept(st.text());
             }
+            Element lae = getAcceptedTagAndIdElementOrNull(clone, LATEST_ARTICLE_ELEMENT, LATEST_ARTICLE_ID);
+            latestArticleRef.accept(lae);
+            article.appendChild(clone);
         });
+        this.latestArticlesElement = latestArticleRef.getValue();
+        this.summaryTitle = summaryTitleRef.getValue() != null ? summaryTitleRef.getValue() : title;
 
         Multimap<UUID, Element> pageRefNodes = ArrayListMultimap.create();
 
@@ -188,8 +233,7 @@ public class PageRecord {
     private FileTime getFileLastModified(Path path) {
         FileTime time;
         try {
-            time = Files.getLastModifiedTime(path);
-            Files.getAttribute(path, "creationTime");
+            time = Files.readAttributes(path, BasicFileAttributes.class).lastModifiedTime();
         } catch (IOException e) {
             time = FileTime.fromMillis(System.currentTimeMillis());
             log.warn("Cannot determine modified time {}", this);
@@ -200,8 +244,7 @@ public class PageRecord {
     private FileTime getCreationTime(Path path) {
         FileTime time;
         try {
-            time = (FileTime) Files.getAttribute(path, "creationTime");
-
+            time = Files.readAttributes(path, BasicFileAttributes.class).creationTime();
         } catch (IOException | UnsupportedOperationException | ClassCastException e) {
             time = FileTime.fromMillis(System.currentTimeMillis());
             log.warn("Cannot determine creation time for {}", this);
@@ -453,23 +496,38 @@ public class PageRecord {
     }
 
     private String generateTitleTrail() {
+        return generateTitleTrail(true);
+    }
+
+    private String generateTitleTrail(boolean showTopmost) {
         StringBuilder output = new StringBuilder();
         output.append(getTitle());
 
         PageRecord parent = getParent();
         if (parent != null) {
             output.append(Entities.NBSP).append(Entities.MDASH).append(" ");
-            parentTitle(output, parent);
+            parentTitle(output, parent, showTopmost);
         }
 
         return output.toString();
     }
 
-    private static void parentTitle(StringBuilder output, PageRecord page) {
+    public String parentTitle(boolean showTopmost) {
+        if (parent != null) {
+            StringBuilder output = new StringBuilder();
+            parentTitle(output, parent, showTopmost);
+            return output.toString();
+        }
+        return "";
+    }
+
+    private static void parentTitle(StringBuilder output, PageRecord page, boolean showTopmost) {
         PageRecord parent = page.getParent();
         if (parent != null) {
-            parentTitle(output, parent);
-            output.append(Entities.NBSP).append("/ ");
+            if (parent.parent != null || showTopmost) {
+                parentTitle(output, parent, showTopmost);
+                output.append(Entities.NBSP).append("/ ");
+            }
         }
         output.append(page.getTitle());
     }
@@ -483,7 +541,7 @@ public class PageRecord {
             PageRecord page = pages.get(i);
             boolean isFirst = i == 0;
             boolean isLast = i == size - 1;
-            boolean isSelf = self != null && PageRecord.COMPARATOR.compare(page, self) == 0;
+            boolean isSelf = self != null && PageRecord.COMPARE_BY_NAME.compare(page, self) == 0;
 
             if (isFirst) {
                 addChild(nav, "span").attr(
@@ -551,7 +609,7 @@ public class PageRecord {
     private Element processReferences(Node rootNode, Multimap<UUID, Element> pageRefNodes, List<String> references) {
         AtomicReference<Element> referenceList = new AtomicReference<>(footer.getElementById(REFERENCE_LIST));
 
-        NodeHelper.search(rootNode, ANCHOR_REF, Element.class, refNode -> {
+        NodeHelper.deepSearch(rootNode, Element.class, ANCHOR_REF, refNode -> {
             String referenceUrl = getReferenceValue(refNode, REF_SCHEME);
             int idx = references.indexOf(referenceUrl);
             String number = null;
@@ -616,7 +674,7 @@ public class PageRecord {
 
     private static void collectPageReferences(Node article, Multimap<UUID, Element> pageRefNodes) {
 
-        NodeHelper.search(article, ANCHOR_PAGE, Element.class, pageRef -> {
+        NodeHelper.deepSearch(article, Element.class, ANCHOR_PAGE, pageRef -> {
             UUID refId = getPageRefId(pageRef, PAGE_SCHEME);
             pageRefNodes.put(refId, pageRef);
         });
@@ -625,11 +683,11 @@ public class PageRecord {
     private void addDateAndCopyright(String copyRight) {
         Element fileData = addChild(footer, "div").attr("class", "file-data");
 
-        fileData.appendElement("span").attr("class", "source-modification").text(DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified.toMillis()).toZonedDateTime()));
+        fileData.appendElement("span").attr("class", "source-modification").text(formatFileDateInGMT(this.timeModified));
         if (copyRight != null) {
             String years;
             int yearCreated = getGMTYear(timeCreated.toMillis());
-            int yearModified = getGMTYear(timeModified.toMillis());
+            int yearModified = getGMTYear(this.timeModified.toMillis());
             if (yearCreated >= yearModified) {
                 years = String.format("%04d", yearModified);
             }
@@ -640,6 +698,120 @@ public class PageRecord {
                         .text(String.format("\u00a9\u00a0%s\u00a0%s.", years, copyRight.replaceAll("\\s", "\u00a0")));
         }
     }
+
+    private String formatFileDateInGMT(FileTime timeModified1) {
+        return DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified1.toMillis()).toZonedDateTime());
+    }
+
+    public void replaceLastArticlesReference(List<PageRecord> sortedPages) {
+        if (latestArticlesElement == null) {
+            return;
+        }
+        List<PageRecord> orderedChildren = new ArrayList<>();
+        PageRecord self = this;
+        sortedPages.forEach((p) -> {
+            List<Node> s = p.ensureSummary();
+            if (p.isChildOf(self) && orderedChildren.size() < 10 && s != null && !s.isEmpty()) {
+                orderedChildren.add(p);
+            }
+        });
+        if (orderedChildren.isEmpty()) {
+            return;
+        }
+        latestArticlesElement.tagName("div");
+        this.latestArticlesElement.attr("class", "latest-articles");
+        orderedChildren.forEach((page) -> addArticle(this.latestArticlesElement, page));
+    }
+
+    private void addArticle(Element articleList, PageRecord page) {
+        List<Node> s = page.ensureSummary();
+        if (s == null) {
+            return;
+        }
+        Element item = articleList.appendElement("div");
+        if (articleList.children().size() == 1) {
+            item.attr("class", "latest-articles-item latest-articles-item-first");
+        }
+        else {
+            item.attr("class", "latest-articles-item latest-articles-item-subsequent");
+        }
+
+        item
+                .appendElement("div")
+                .attr("class", "latest-article-category")
+                .text(page.parentTitle(false));
+
+        item
+                .appendElement("div").attr("class", "latest-article-date")
+                .text(formatFileDateInGMT(page.getTimeModified()));
+
+        item
+                .appendElement("div")
+                        .attr("class", "latest-article-title")
+                        .appendElement("a")
+                                .attr("class", "latest-article-link")
+                                .attr("href", page.getDynamicFilename())
+                                .text(page.getSummaryTitle());
+
+//        Element summaryAndDate = item.appendElement("div").attr("class", "latest-article-content");
+
+        Element summary = item
+                .appendElement("div").attr("class", "latest-article-summary");
+        for (Node n : s) {
+            summary.appendChild(n);
+        }
+
+    }
+
+    private List<Node> ensureSummary() {
+        if (summary != null) {
+            return summary;
+        }
+        summary = summarizeText();
+        return summary;
+    }
+
+    private List<Node> summarizeText() {
+        Element p = NodeHelper.deepGetFirst(article,
+                Element.class, new Predicate<Element>() {
+                    @Override
+                    public boolean test(Element e) {
+                        if (e == null) {
+                            return false;
+                        }
+                        if (!SUMMARY_ELEMENT.equalsIgnoreCase(e.tagName())) {
+                            return false;
+                        }
+                        String id = e.attr("id");
+                        return SUMMARY_ID.equalsIgnoreCase(id);
+                    }
+                });
+        if (p == null) {
+            return null;
+        }
+        LocalToRelativeLinkVisitor visitor = new LocalToRelativeLinkVisitor();
+        ArrayList<Node> summary = new ArrayList<>();
+        for (Node child : p.childNodes()) {
+            summary.add(child.clone().traverse(visitor));
+        }
+        return summary.isEmpty() ? Collections.emptyList() : summary;
+    }
+
+    public boolean isChildOf(PageRecord supposedParent) {
+        if (supposedParent == null) {
+            return false;
+        }
+        UUID parentId = supposedParent.id;
+        PageRecord p = this.parent;
+        while (p != null) {
+            if (p.id.equals(parentId)) {
+                return true;
+            }
+            p = p.parent;
+        }
+        return false;
+    }
+
 
     private int getGMTYear(long millis) {
         GregorianCalendar calendar = getCalendarInGMT(millis);
@@ -755,19 +927,36 @@ public class PageRecord {
         return item;
     }
 
-    private Element getNoteElementOrNull(Node node) {
+    private Element getAcceptedTagAndIdElementOrNull(@NonNull Node node, @NonNull String tagName, @NonNull String idValue) {
+        return getAcceptedElementOrNull(node, NodeHelper.elementByNameCaseInsensitive(tagName).and((e) -> idValue.equalsIgnoreCase(e.attr("id"))));
+    }
+
+    private Element getAcceptedTagElementOrNull(@NonNull Node node, @NonNull String tagName, @NonNull Predicate<Element> predicate) {
+        return getAcceptedElementOrNull(node, NodeHelper.elementByNameCaseInsensitive(tagName).and(predicate));
+    }
+
+    private Element getAcceptedElementOrNull(@NonNull Node node, @NonNull Predicate<Element> predicate) {
         if (!(node instanceof Element)) {
             return null;
         }
         Element element = (Element)node;
-        if (!NOTE_ELEMENT.equalsIgnoreCase(element.tagName())) {
-            return null;
+        return predicate.test(element) ? element : null;
+    }
+
+    private Node cloneNodeOrStrippedLink(Node node) {
+        if (!(node instanceof Element)) {
+            return node.clone();
         }
-        String elementId = element.attr("id");
-        if (elementId == null || elementId.isEmpty()) {
-            return null;
+        Element e = (Element)node;
+        if (!"a".equalsIgnoreCase(e.tagName())) {
+            return node;
         }
-        return element;
+        Element replaced = document.createElement("span");
+        for (Node child : NodeHelper.children(e, Node.class)) {
+            replaced.appendChild(child.clone());
+        }
+
+        return e;
     }
 
     private void printElements(String title, Element article) {
@@ -789,7 +978,7 @@ public class PageRecord {
     }
 
     @RequiredArgsConstructor
-    private class SimpleElement {
+    private static class SimpleElement {
         @Getter
         @NonNull
         private final Element element;
@@ -805,6 +994,30 @@ public class PageRecord {
         public SimpleElement content(String content) {
             element.text(content);
             return this;
+        }
+    }
+
+    private class LocalToRelativeLinkVisitor implements NodeVisitor {
+        @Override
+        public void head(Node node, int depth) {
+
+        }
+
+        @Override
+        public void tail(Node node, int depth) {
+            if (!(node instanceof Element)) {
+                return;
+            }
+            Element e = (Element)node;
+            if (!"a".equalsIgnoreCase(e.tagName())) {
+                return;
+            }
+            String href = e.attr("href");
+            if (href == null || !href.startsWith("#")) {
+                return;
+            }
+            String newHref = getDynamicFilename() + href;
+            e.attr("href", newHref);
         }
     }
 }

@@ -5,7 +5,6 @@ import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.select.NodeVisitor;
 
-import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -19,7 +18,7 @@ public class NodeHelper {
         return () -> IteratorWithTypePredicate.of(node.childNodes().iterator(), type);
     }
 
-    public static void search(@NonNull Node node, @NonNull Predicate<Node> predicate, Consumer<Node> consumer) {
+    public static void deepSearch(@NonNull Node node, @NonNull Predicate<Node> predicate, Consumer<Node> consumer) {
 
         node.traverse(new NodeVisitor() {
             @Override
@@ -36,7 +35,7 @@ public class NodeHelper {
         });
     }
 
-    public static <T extends Node> void search(@NonNull Node node, @NonNull Predicate<T> predicate, Class<T> c, Consumer<T> consumer) {
+    public static <T extends Node> void deepSearch(@NonNull Node node, Class<T> c, @NonNull Predicate<T> predicate, Consumer<T> consumer) {
 
         node.traverse(new NodeVisitor() {
             @Override
@@ -56,10 +55,23 @@ public class NodeHelper {
         });
     }
 
-    public static Node searchFirst(@NonNull Node node, @NonNull Predicate<Element> predicate) {
+    public static <T extends Node> T deepGetFirst(@NonNull Node node, Class<T> c, @NonNull Predicate<T> predicate) {
+        return deepGetOne(node, c, predicate, new GetFirst<>());
+    }
+
+    public static <T extends Node> T deepGetLast(@NonNull Node node, Class<T> c, @NonNull Predicate<T> predicate) {
+        return deepGetOne(node, c, predicate, new GetLast<>());
+    }
+
+    public static <T extends Node> T deepGetOne(@NonNull Node node, Class<T> c, @NonNull Predicate<T> predicate, GetOne<T> result) {
+        deepSearch(node, c, predicate, result);
+        return result.getValue();
+    }
+
+    public static Element searchFirst(@NonNull Node node, @NonNull Predicate<Element> predicate) {
         for (Node n : node.childNodes()) {
             if (n instanceof Element && predicate.test((Element)n)) {
-                return n;
+                return (Element)n;
             }
         }
         return null;
@@ -68,5 +80,4 @@ public class NodeHelper {
     public static Predicate<Element> elementByNameCaseInsensitive(@NonNull String name) {
         return new ByElementName(name, false);
     }
-
 }
