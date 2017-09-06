@@ -388,61 +388,40 @@ public class PageRecord {
     private void addHead(@NonNull Map<String, Object> cache) {
         Element head = document.head();
 
-        addChild(head, "meta").attr("charset", "UTF-8");
-        // 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2, minimum-scale=0.6"/>
+        head.appendElement("meta").attr("charset", "UTF-8");
 
-        addChild(head, "meta")
+        head.appendElement("meta")
                 .attr("name", "viewport")
                 .attr("content", "width=device-width, initial-scale=1.0, maximum-scale=2, minimum-scale=0.5");
 
-        Object style = cache.computeIfAbsent(STYLE_CSS, (s) -> {
-            if ("inline".equals(cache.get(CSS_TARGET_TYPE))) {
-                Path styleSheetFile = rootPath.resolve(STYLE_CSS);
-                if (Files.exists(styleSheetFile) && Files.isReadable(styleSheetFile)) {
-                    try {
-                        System.out.println("Reading stylesheet for inlining...");
-                        StringBuilder builder = new StringBuilder();
-                        builder.append("\n");
-                        for (String line : Files.readAllLines(styleSheetFile, StandardCharsets.UTF_8)) {
-                            if (!line.trim().isEmpty()) {
-                                builder.append(line).append("\n");
-                            }
-                        }
-                        return builder.toString();
-                    } catch (IOException e) {
-                        // FALLTHROUGH
-                    }
-                }
-            }
-            return System.currentTimeMillis();
-        });
-        addSimpleChild(head, "link")
+        long stamp = System.currentTimeMillis();
+
+        head.appendElement("link")
                 .attr("rel", "stylesheet")
                 .attr("href", "http://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
                 .attr("type", "text/css");
-        if (style instanceof String) {
-            addChild(head, "style").appendChild(new DataNode((String)style, ""));
-        }
-        else {
-            addSimpleChild(head, "link")
-                    .attr("rel", "stylesheet")
-                    .attr("href", STYLE_CSS + "?stamp=" + style)
-                    .attr("type", "text/css");
-        }
+        head.appendElement("link")
+                .attr("rel", "stylesheet")
+                .attr("href", STYLE_CSS + "?stamp=" + stamp)
+                .attr("type", "text/css");
         if (math) {
-            addSimpleChild(head, "script")
+            head.appendElement("script")
                     .attr("type", "text/javascript")
                     .attr("src", "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML")
-                    .getElement().appendChild(new DataNode("MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });", ""));
+                    .appendChild(new DataNode("MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });", ""));
         }
+        head.appendElement("script")
+                .attr("type", "text/javascript")
+                .attr("src", "./emmef-util.js?stamp=" + stamp);
 
-        addSimpleChild(head, "title").content(generateTitleTrail());
+        head.appendElement("title").text(generateTitleTrail());
     }
 
     private void addBody(String copyRight) {
         Element body = document.body();
+        body.attr("onload", "EmmefUtil.init();");
         body.appendChild(header);
-        Element nav = addChild(header, "nav");
+        Element nav = header.appendElement("nav");
 
         List<PageRecord> parents = getParents(false);
         List<PageRecord> self = Collections.singletonList(this);
@@ -481,17 +460,17 @@ public class PageRecord {
         String imageStyles = duplicate ? "permalink-disabled" : "permalink-enabled";
 
         if (!duplicate) {
-            addSimpleChild(nav, "a")
+            nav.appendElement("a")
                     .attr("href", id.toString() + ".html")
                     .attr("class", imageStyles)
                     .attr("title", "Permanent link")
-                    .content("" + Entities.ODOT);
+                    .text("" + Entities.ODOT);
         }
         else {
-            addSimpleChild(nav, "span")
+            nav.appendElement("span")
                     .attr("class", imageStyles)
                     .attr("title", "Permanent link")
-                    .content("" + Entities.ODOT);
+                    .text("" + Entities.ODOT);
         }
     }
 
@@ -544,16 +523,16 @@ public class PageRecord {
             boolean isSelf = self != null && PageRecord.COMPARE_BY_NAME.compare(page, self) == 0;
 
             if (isFirst) {
-                addChild(nav, "span").attr(
+                nav.appendElement("span").attr(
                         "class", createClasses(
                                 baseClass, "separator", true, false, false));
             }
-            addSimpleChild(nav, "a")
+            nav.appendElement("a")
                     .attr("href", page.getDynamicFilename())
                     .attr("class", createClasses(baseClass, "element", isFirst, isLast, isSelf))
-                    .content(page.getTitle());
+                    .text(page.getTitle());
 
-            addChild(nav, "span").attr(
+            nav.appendElement("span").attr(
                     "class", createClasses(
                             baseClass, "separator", false, isLast, false));
         }
@@ -585,18 +564,7 @@ public class PageRecord {
                 .append(" ").append(baseClass).append("-").append(subClass).append("-").append(position);
     }
 
-
-    private Element addChild(Element parent, String tagName) {
-        Element element = document.createElement(tagName);
-        parent.appendChild(element);
-        return element;
-    }
-
-    private SimpleElement addSimpleChild(Element parent, String tagName) {
-        return new SimpleElement(addChild(parent, tagName));
-    }
-
-    public SortedSet<PageRecord> getSiblings() {
+    private SortedSet<PageRecord> getSiblings() {
         if (siblings != null) {
             return siblings;
         }
@@ -612,8 +580,8 @@ public class PageRecord {
         NodeHelper.deepSearch(rootNode, Element.class, ANCHOR_REF, refNode -> {
             String referenceUrl = getReferenceValue(refNode, REF_SCHEME);
             int idx = references.indexOf(referenceUrl);
-            String number = null;
-            String refId = null;
+            String number;
+            String refId;
             if (idx == -1) {
                 Element note = null;
                 if (referenceUrl.startsWith(NOTE_SCHEME)) {
@@ -628,30 +596,29 @@ public class PageRecord {
                 refId = "scms_reference_" + number;
                 if (referenceList.get() == null) {
                     referenceList.set(
-                            addSimpleChild(footer, "div")
+                            footer.appendElement("div")
                                     .attr("class", "reference references")
-                                    .getElement()
                                     .appendElement("table")
                                         .attr("class", "reference reference-list")
                                         .attr("id", REFERENCE_LIST));
                 }
-                Element reference = addSimpleChild(referenceList.get(), "tr")
+                Element reference = referenceList.get().appendElement("tr")
                         .attr("class", "reference reference-item")
-                        .attr("id", refId).getElement();
+                        .attr("id", refId);
 
-                addSimpleChild(reference, "td")
+                reference.appendElement("td")
                         .attr("class", "reference reference-item-number")
-                        .content(number);
+                        .text(number);
 
-                Element content = addSimpleChild(reference, "td")
-                        .attr("class", "reference reference-item-content").getElement();
+                Element content = reference.appendElement("td")
+                        .attr("class", "reference reference-item-content");
 
                 if (note == null) {
                     String textContent = refNode.text();
-                    Element anchor = addSimpleChild(content, "a")
+                    Element anchor = content.appendElement("a")
                             .attr("href", referenceUrl)
                             .attr("class", "reference reference-item-content-link")
-                            .content(textContent != null && !textContent.isEmpty() ? textContent : referenceUrl).getElement();
+                            .text(textContent != null && !textContent.isEmpty() ? textContent : referenceUrl);
                     UUID pageRef = referenceUrl.startsWith(PAGE_SCHEME) ? getUuidorNull(referenceUrl.substring(PAGE_SCHEME.length())) : null;
                     if (pageRef != null) {
                         pageRefNodes.put(pageRef, anchor);
@@ -681,9 +648,10 @@ public class PageRecord {
     }
 
     private void addDateAndCopyright(String copyRight) {
-        Element fileData = addChild(footer, "div").attr("class", "file-data");
+        Element fileData = footer.appendElement("div").attr("class", "file-data");
 
-        fileData.appendElement("span").attr("class", "source-modification").text(formatFileDateInGMT(this.timeModified));
+        fileData.appendElement("div").attr("class", "source-modification")
+                .appendElement("span").attr("class", "milliseconds-date").text(formatFileDateInGMT(this.timeModified));
         if (copyRight != null) {
             String years;
             int yearCreated = getGMTYear(timeCreated.toMillis());
@@ -735,15 +703,25 @@ public class PageRecord {
         else {
             item.attr("class", "latest-articles-item latest-articles-item-subsequent");
         }
-
-        item
+        String categoryLink = page.parent != null ? page.parent.getDynamicFilename() : null;
+        Element categoryDiv = item
                 .appendElement("div")
-                .attr("class", "latest-article-category")
-                .text(page.parentTitle(false));
+                .attr("class", "latest-article-category");
+        if (categoryLink != null) {
+            categoryDiv.appendElement("a")
+                    .attr("href", categoryLink)
+                    .attr("class", "latest-article-category")
+                    .text(page.parentTitle(false));
+        }
+        else {
+            categoryDiv.text(page.parentTitle(false));
+        }
+
 
         item
                 .appendElement("div").attr("class", "latest-article-date")
-                .text(formatFileDateInGMT(page.getTimeModified()));
+                .appendElement("span").attr("class", "milliseconds-age")
+                .text(Long.toString(page.getTimeModified().toMillis()));
 
         item
                 .appendElement("div")
@@ -773,18 +751,15 @@ public class PageRecord {
 
     private List<Node> summarizeText() {
         Element p = NodeHelper.deepGetFirst(article,
-                Element.class, new Predicate<Element>() {
-                    @Override
-                    public boolean test(Element e) {
-                        if (e == null) {
-                            return false;
-                        }
-                        if (!SUMMARY_ELEMENT.equalsIgnoreCase(e.tagName())) {
-                            return false;
-                        }
-                        String id = e.attr("id");
-                        return SUMMARY_ID.equalsIgnoreCase(id);
+                Element.class, e -> {
+                    if (e == null) {
+                        return false;
                     }
+                    if (!SUMMARY_ELEMENT.equalsIgnoreCase(e.tagName())) {
+                        return false;
+                    }
+                    String id = e.attr("id");
+                    return SUMMARY_ID.equalsIgnoreCase(id);
                 });
         if (p == null) {
             return null;
@@ -797,14 +772,13 @@ public class PageRecord {
         return summary.isEmpty() ? Collections.emptyList() : summary;
     }
 
-    public boolean isChildOf(PageRecord supposedParent) {
+    private boolean isChildOf(PageRecord supposedParent) {
         if (supposedParent == null) {
             return false;
         }
-        UUID parentId = supposedParent.id;
         PageRecord p = this.parent;
         while (p != null) {
-            if (p.id.equals(parentId)) {
+            if (p.id.equals(supposedParent.id)) {
                 return true;
             }
             p = p.parent;
@@ -825,7 +799,7 @@ public class PageRecord {
     }
 
 
-    protected void appendNormalized(@NonNull StringBuilder output, @NonNull String name) {
+    private void appendNormalized(@NonNull StringBuilder output, @NonNull String name) {
         name.chars().forEach(c -> {
             char chr = (char)c;
             if (chr <= ' '|| chr >= '\u007f' || reservedChars.indexOf(c) != -1) {
@@ -902,14 +876,14 @@ public class PageRecord {
     }
 
     private static String getContent(Node head, Predicate<Element> predicate) {
-        Node meta = NodeHelper.searchFirst(head, predicate);
-        return meta instanceof Element ? ((Element)meta).text() : null;
+        Element meta = NodeHelper.searchFirst(head, predicate);
+        return meta != null ? meta.text() : null;
     }
 
     private static Element getNodeByTag(Document document, String tagName, NodeExpectation expectation) {
 
         Elements elementsByTagName = document.getElementsByTag(tagName);
-        Element item = null;
+        Element item;
         if (elementsByTagName.size() == 0) {
             if (expectation == NodeExpectation.OPTIONAL) {
                 item = null;
@@ -941,60 +915,6 @@ public class PageRecord {
         }
         Element element = (Element)node;
         return predicate.test(element) ? element : null;
-    }
-
-    private Node cloneNodeOrStrippedLink(Node node) {
-        if (!(node instanceof Element)) {
-            return node.clone();
-        }
-        Element e = (Element)node;
-        if (!"a".equalsIgnoreCase(e.tagName())) {
-            return node;
-        }
-        Element replaced = document.createElement("span");
-        for (Node child : NodeHelper.children(e, Node.class)) {
-            replaced.appendChild(child.clone());
-        }
-
-        return e;
-    }
-
-    private void printElements(String title, Element article) {
-        StringBuilder output = new StringBuilder();
-        output.append("PAGE ").append(title).append(":\n");
-        printNode(output, article, 1);
-        System.out.println(output);
-    }
-
-    private void printNode(StringBuilder output, Element element, int indent) {
-        String indents = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
-        output.append(indents.substring(0, indent)).append("<").append(element.tagName());
-
-        for (Attribute attribute : element.attributes().asList()) {
-            output.append(" ").append(attribute.getKey()).append("=\"").append(attribute.getValue()).append("\"");
-        }
-        output.append(">\n");
-        NodeHelper.children(element, Element.class).forEach(child -> printNode(output, child, indent + 1));
-    }
-
-    @RequiredArgsConstructor
-    private static class SimpleElement {
-        @Getter
-        @NonNull
-        private final Element element;
-
-        public SimpleElement appendChild(Node node) {
-            element.appendChild(node);
-            return this;
-        }
-        public SimpleElement attr(String name, String value) {
-            element.attr(name, value);
-            return this;
-        }
-        public SimpleElement content(String content) {
-            element.text(content);
-            return this;
-        }
     }
 
     private class LocalToRelativeLinkVisitor implements NodeVisitor {
