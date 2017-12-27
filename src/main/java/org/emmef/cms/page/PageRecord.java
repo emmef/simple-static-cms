@@ -398,7 +398,7 @@ public class PageRecord {
 
         head.appendElement("link")
                 .attr("rel", "stylesheet")
-                .attr("href", "http://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
+                .attr("href", "https://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
                 .attr("type", "text/css");
         head.appendElement("link")
                 .attr("rel", "stylesheet")
