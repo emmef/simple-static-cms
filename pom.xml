@@ -20,6 +20,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.6.1</version>
                 <configuration>
                     <source>${version-java}</source>
                     <target>${version-java}</target>
@@ -71,7 +72,7 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>${version-guava}</version>
+            <version>22.0</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/commons-lang/commons-lang -->
         <dependency>
