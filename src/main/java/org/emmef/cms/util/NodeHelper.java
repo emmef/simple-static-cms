@@ -5,6 +5,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.select.NodeVisitor;
 
+import java.util.Arrays;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -79,5 +80,9 @@ public class NodeHelper {
 
     public static Predicate<Element> elementByNameCaseInsensitive(@NonNull String name) {
         return new ByElementName(name, false);
+    }
+
+    public static Predicate<Element> elementByNamesCaseInsensitive(@NonNull String... names) {
+        return new ByElementNames(Arrays.asList(names), false);
     }
 }

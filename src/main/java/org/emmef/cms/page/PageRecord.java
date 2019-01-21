@@ -1,6 +1,8 @@
 package org.emmef.cms.page;
 
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multimap;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +38,7 @@ public class PageRecord {
     private static final int MAX_GENERATED_LENGTH = MAX_NAME_LENGTH - HTML_SUFFIX.length();
 
     public static final String PAGE_SCHEME = "page:";
+    public static final String ELEMENT_SCHEME = "elem:";
     public static final String REF_SCHEME = "ref:";
     public static final String NOTE_SCHEME = "note:";
     public static final String NOTE_ELEMENT = "aside";
@@ -55,6 +58,7 @@ public class PageRecord {
     public static final Predicate<Element> ANCHOR = NodeHelper.elementByNameCaseInsensitive("a");
     public static final Predicate<Element> ANCHOR_PAGE = ANCHOR.and(ByAttributeValue.startsWith("href", PAGE_SCHEME));
     public static final Predicate<Element> ANCHOR_REF = ANCHOR.and(ByAttributeValue.startsWith("href", REF_SCHEME));
+    public static final Predicate<Element> ELEMENT_WITH_ID = NodeHelper.elementByNamesCaseInsensitive("h1", "h2", "h3", "dt").and(ByAttributeValue.isUuid("id"));
 
     public static final Predicate<Element> TITLE = NodeHelper.elementByNameCaseInsensitive("title");
     public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
@@ -76,6 +80,9 @@ public class PageRecord {
     private final Element latestArticlesElement;
     @Getter
     private final String summaryTitle;
+    @NonNull
+    @Getter
+    private final Map<UUID, String> idContentMap;
     @Getter
     private UUID parentId;
     @NonNull
@@ -196,8 +203,10 @@ public class PageRecord {
 
         collectPageReferences(article, pageRefNodes);
 
+        this.idContentMap = collectIdElementMap(article);
         this.path = path;
         this.pageRefNodes = pageRefNodes;
+
         try {
             rootPath.relativize(path);
         }
@@ -207,6 +216,24 @@ public class PageRecord {
         this.rootPath = rootPath;
         this.timeModified = getFileLastModified(path);
         this.timeCreated = getCreationTime(path);
+    }
+
+    private ImmutableMap<UUID, String> collectIdElementMap(Node article) {
+        Map<UUID, String> contentIdMap = new HashMap<>();
+        NodeHelper.deepSearch(article, Element.class, ELEMENT_WITH_ID, (node) -> {
+            UUID id = getUuidorNull(node.attr("id"));
+            if (id != null) {
+                if (contentIdMap.containsKey(id)) {
+                    log.warn("Duplicate ID found in {} element of page {}: .", node.tagName(), this.id, this.title);
+                }
+                else {
+                    contentIdMap.put(id, node.text());
+                }
+            }
+
+        });
+
+        return ImmutableMap.copyOf(contentIdMap);
     }
 
     private Element collectReferences(Multimap<UUID, Element> pageRefNodes) {
@@ -264,25 +291,29 @@ public class PageRecord {
             String refPageTitle = page.getTitle();
             pageRefNodes.get(id).forEach((n -> {
                 n.attr("href", page.getDynamicFilename());
-                String content = n.text();
-                if (content == null || content.isEmpty()) {
-                    n.text(refPageTitle);
-                }
-                else {
-                    switch (content.trim()) {
-                        case ":title" :
-                            n.text(refPageTitle);
-                            break;
-                        case ":title-lower":
-                            n.text(refPageTitle.toLowerCase());
-                            break;
-                        default:
-                            // No replacement
-                    }
-                }
+                elementTextReplacement(refPageTitle, n);
             }));
             toReplace.remove(id);
         });
+
+        Iterator<UUID> iterator = toReplace.iterator();
+        while (iterator.hasNext()) {
+            UUID id = iterator.next();
+            boolean replaced = false;
+            for (PageRecord page : pages.values()) {
+                if (page.getIdContentMap().containsKey(id)) {
+                    String refElementText = page.getIdContentMap().get(id);
+                    pageRefNodes.get(id).forEach(n -> {
+                        n.attr("href", page.getDynamicFilename() + "#" + id);
+                        elementTextReplacement(refElementText, n);
+                    });
+                    replaced = true;
+                }
+            }
+            if (replaced) {
+                iterator.remove();
+            }
+        }
 
         toReplace.forEach((id) -> {
             pageRefNodes.get(id).forEach((n -> {
@@ -290,6 +321,25 @@ public class PageRecord {
                 n.text("[NOT FOUND]");
             }));
         });
+    }
+
+    private void elementTextReplacement(String refPageTitle, Element n) {
+        String content = n.text();
+        if (content == null || content.isEmpty()) {
+            n.text(refPageTitle);
+        }
+        else {
+            switch (content.trim()) {
+                case ":title" :
+                    n.text(refPageTitle);
+                    break;
+                case ":title-lower":
+                    n.text(refPageTitle.toLowerCase());
+                    break;
+                default:
+                    // No replacement
+            }
+        }
     }
 
     public void setParent(PageRecord parent) {

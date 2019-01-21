@@ -5,8 +5,10 @@ import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 public class ByAttributeValue implements Predicate<Node> {
+    private static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
     private final String attributeName;
     private final Predicate<String> valuePredicate;
 
@@ -21,6 +23,10 @@ public class ByAttributeValue implements Predicate<Node> {
 
     public static ByAttributeValue startsWith(@NonNull String attributeName, @NonNull String value) {
         return new ByAttributeValue(attributeName, (s) -> s.startsWith(value));
+    }
+
+    public static ByAttributeValue isUuid(@NonNull String attributeName) {
+        return new ByAttributeValue(attributeName, (s) -> UUID_PATTERN.matcher(s).matches());
     }
 
     @Override

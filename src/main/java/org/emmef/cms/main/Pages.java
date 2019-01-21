@@ -171,7 +171,10 @@ public class Pages {
         List<Path> subDirectories = new ArrayList<>();
         AtomicReference<Boolean> hadIndex = new AtomicReference<>(Boolean.FALSE);
         Files.list(source).forEach((file) -> {
-            if (Files.isDirectory(file)) {
+            if ("_.".contains(file.getFileName().toString().substring(0,1))) {
+                log.info("Ignore {}: {}", Files.isDirectory(file) ? "directory" : "file", file.getFileName());
+            }
+            else if (Files.isDirectory(file)) {
                 subDirectories.add(file);
             }
             else {
