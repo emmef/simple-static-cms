@@ -786,12 +786,12 @@ public class PageRecord {
         Element summary = item
                 .appendElement("div").attr("class", "latest-article-summary");
         for (Node n : s) {
-            summary.appendChild(n);
+            summary.appendChild(n.clone());
         }
 
     }
 
-    private List<Node> ensureSummary() {
+    public List<Node> ensureSummary() {
         if (summary != null) {
             return summary;
         }
