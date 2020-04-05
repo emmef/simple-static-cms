@@ -58,7 +58,7 @@ public class PageRecord {
     public static final Predicate<Element> ANCHOR = NodeHelper.elementByNameCaseInsensitive("a");
     public static final Predicate<Element> ANCHOR_PAGE = ANCHOR.and(ByAttributeValue.startsWith("href", PAGE_SCHEME));
     public static final Predicate<Element> ANCHOR_REF = ANCHOR.and(ByAttributeValue.startsWith("href", REF_SCHEME));
-    public static final Predicate<Element> ELEMENT_WITH_ID = NodeHelper.elementByNamesCaseInsensitive("h1", "h2", "h3", "dt").and(ByAttributeValue.isUuid("id"));
+    public static final Predicate<Element> ELEMENT_WITH_ID = NodeHelper.elementByNamesCaseInsensitive("h1", "h2", "h3", "dt", "figcaption").and(ByAttributeValue.isUuid("id"));
 
     public static final Predicate<Element> TITLE = NodeHelper.elementByNameCaseInsensitive("title");
     public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
@@ -483,11 +483,16 @@ public class PageRecord {
         });
 
         ArrayList<PageRecord> children = new ArrayList<>(getChildren());
+        addPermaLink(nav);
+        nav.appendElement("span")
+                .attr("onclick", "EmmefUtil.contrast()")
+                .attr("class", "contrast-setter")
+                .html("&#x25E9");
+
 
         if (!parents.isEmpty()) {
             writeLinks(null, nav, parents, "parents");
         }
-        addPermaLink(nav);
         writeLinks(this, nav, self, "current");
         if (!children.isEmpty()) {
             writeLinks(null, nav, children, "children");
@@ -689,11 +694,18 @@ public class PageRecord {
         return referenceList.get();
     }
 
-    private static void collectPageReferences(Node article, Multimap<UUID, Element> pageRefNodes) {
+    private void collectPageReferences(Node article, Multimap<UUID, Element> pageRefNodes) {
 
         NodeHelper.deepSearch(article, Element.class, ANCHOR_PAGE, pageRef -> {
             UUID refId = getPageRefId(pageRef, PAGE_SCHEME);
             pageRefNodes.put(refId, pageRef);
+        });
+
+        notes.values().forEach(note -> {
+            NodeHelper.deepSearch(note, Element.class, ANCHOR_PAGE, pageRef -> {
+                UUID refId = getPageRefId(pageRef, PAGE_SCHEME);
+                pageRefNodes.put(refId, pageRef);
+            });
         });
     }
 

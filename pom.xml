@@ -10,7 +10,7 @@
 
     <properties>
         <version-java>1.8</version-java>
-        <version-lombok>1.16.16</version-lombok>
+        <version-lombok>1.18.12</version-lombok>
         <version-slf4j>1.7.25</version-slf4j>
         <version-guava>22.0</version-guava>
     </properties>
