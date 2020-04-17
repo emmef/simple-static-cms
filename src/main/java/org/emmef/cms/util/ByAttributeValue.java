@@ -8,7 +8,7 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 public class ByAttributeValue implements Predicate<Node> {
-    private static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
+    public static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
     private final String attributeName;
     private final Predicate<String> valuePredicate;
 
