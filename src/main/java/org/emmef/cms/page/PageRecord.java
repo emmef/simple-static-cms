@@ -8,9 +8,7 @@ import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
-import org.emmef.cms.util.ByAttributeValue;
-import org.emmef.cms.util.GetFirst;
-import org.emmef.cms.util.NodeHelper;
+import org.emmef.cms.util.*;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
 import org.jsoup.nodes.Document;
@@ -173,6 +171,7 @@ public class PageRecord {
         this.header = this.document.createElement("header");
         this.article = this.document.createElement("article");
         this.footer = this.document.createElement("footer");
+        this.summaryTitle = handleSummaryTitle(sourceBody);
         GetFirst<Element> latestArticleRef = new GetFirst<>();
         GetFirst<String> summaryTitleRef = new GetFirst<>();
         NodeHelper.children(sourceBody).forEach(sourceNode -> {
@@ -186,16 +185,11 @@ public class PageRecord {
                 this.notes.put(note.attr("id"), note);
                 return;
             }
-            Element st = getAcceptedTagAndIdElementOrNull(clone, SUMMARY_TITLE_ELEMENT, SUMMARY_TITLE_ID);
-            if (st != null) {
-                summaryTitleRef.accept(st.text());
-            }
             Element lae = getAcceptedTagAndIdElementOrNull(clone, LATEST_ARTICLE_ELEMENT, LATEST_ARTICLE_ID);
             latestArticleRef.accept(lae);
             article.appendChild(clone);
         });
         this.latestArticlesElement = latestArticleRef.getValue();
-        this.summaryTitle = summaryTitleRef.getValue() != null ? summaryTitleRef.getValue() : title;
 
         Multimap<UUID, Element> pageRefNodes = ArrayListMultimap.create();
 
@@ -216,6 +210,21 @@ public class PageRecord {
         this.rootPath = rootPath;
         this.timeModified = getFileLastModified(path);
         this.timeCreated = getCreationTime(path);
+    }
+
+    private String handleSummaryTitle(Element sourceBody) {
+        String sumTitle;
+        Element st = NodeHelper.deepGetFirst(sourceBody, Element.class, NodeHelper.elementByNameCaseInsensitive(SUMMARY_TITLE_ELEMENT).and(ByIdentifier.literal(SUMMARY_TITLE_ID, false)));
+        if (st != null) {
+            sumTitle = st.text();
+            if (sumTitle.equals(title)) {
+                st.remove();
+            }
+        }
+        else {
+            sumTitle = title;
+        }
+        return sumTitle;
     }
 
     private ImmutableMap<UUID, String> collectIdElementMap(Node article) {
