@@ -1,7 +1,6 @@
 package org.emmef.cms.page;
 
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multimap;
 import lombok.*;
@@ -9,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
 import org.emmef.cms.util.*;
+import org.joda.time.format.ISODateTimeFormat;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
 import org.jsoup.nodes.Document;
@@ -25,6 +25,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -51,6 +52,8 @@ public class PageRecord {
     public static final Predicate<Element> META_UUID = META.and(ByAttributeValue.literal("name", "scms-uuid", true));
     public static final Predicate<Element> META_PARENT_UUID = META.and(ByAttributeValue.literal("name", "scms-parent-uuid", true));
     public static final Predicate<Element> META_MATH = META.and(ByAttributeValue.literal("name", "scms-uses-math", true));
+    public static final Predicate<Element> META_PUBLISH_DATE = META.and(ByAttributeValue.literal("name", "scms-published-date", true));
+    public static final Predicate<Element> META_REPUBLISH_DATE = META.and(ByAttributeValue.literal("name", "scms-republish-date", true));
     public static final Predicate<Element> META_INDEX = META.and(ByAttributeValue.literal("name", "scms-is-index", true));
 
     public static final Predicate<Element> ANCHOR = NodeHelper.elementByNameCaseInsensitive("a");
@@ -113,7 +116,7 @@ public class PageRecord {
     @Getter
     private final FileTime timeModified;
     @Getter
-    private final FileTime timeCreated;
+    private final FileTime timePublished;
 
     public static final Comparator<PageRecord> COMPARE_BY_NAME = (p1, p2) -> {
         int i = p1.title.compareToIgnoreCase(p2.title);
@@ -127,20 +130,20 @@ public class PageRecord {
         return new Comparator<PageRecord>() {
             @Override
             public int compare(PageRecord p1, PageRecord p2) {
-                double createP1 = Math.log(Math.max(1, mostRecentCreated - p1.timeCreated.toMillis()));
-                double createP2 = Math.log(Math.max(1, mostRecentCreated - p2.timeCreated.toMillis()));
+                double createP1 = Math.log(Math.max(1, mostRecentCreated - p1.timePublished.toMillis()));
+                double createP2 = Math.log(Math.max(1, mostRecentCreated - p2.timePublished.toMillis()));
                 double createValue = createP1 - createP2;
                 double modP1 = Math.log(Math.max(1, mostRecentModified - p1.timeModified.toMillis()));
                 double modP2 = Math.log(Math.max(1, mostRecentModified - p2.timeModified.toMillis()));
                 double modValue = modP1 - modP2;
 
-                double value = createValue * 2 + modValue;
+                double value = createValue * 10 + modValue;
                 return value < 0 ? -1 : value > 0 ? 1 : p1.id.hashCode() - p2.id.hashCode();
             }
         };
     }
 
-    public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm'GMT'");
+    public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd");
 
     public static TreeSet<PageRecord> createPageSet() {
         return new TreeSet<PageRecord>(COMPARE_BY_NAME);
@@ -208,8 +211,23 @@ public class PageRecord {
             throw new IllegalArgumentException(this + ": path not relative to root-path " + rootPath);
         }
         this.rootPath = rootPath;
-        this.timeModified = getFileLastModified(path);
-        this.timeCreated = getCreationTime(path);
+
+        this.timePublished = getFileTime(head, META_PUBLISH_DATE, (p) -> getCreationTime(p));
+        this.timeModified = getFileTime(head, META_REPUBLISH_DATE, (p) -> getFileLastModified(p));
+
+    }
+
+    private FileTime getFileTime(Node head, Predicate<Element> metaDatePredicate, Function<Path, FileTime> dateFunction) {
+        String metaPublishedDate = getMetaValue(head, metaDatePredicate);
+        if (metaPublishedDate != null) {
+            try {
+                return FileTime.fromMillis(
+                        ISODateTimeFormat.dateTimeParser().parseDateTime(metaPublishedDate).toDate().getTime());
+            } catch (RuntimeException e) {
+                // No value for createTime
+            }
+        }
+        return dateFunction.apply(path);
     }
 
     private String handleSummaryTitle(Element sourceBody) {
@@ -720,12 +738,18 @@ public class PageRecord {
 
     private void addDateAndCopyright(String copyRight) {
         Element fileData = footer.appendElement("div").attr("class", "file-data");
-
+        StringBuilder fileDating = new StringBuilder();
+        fileDating.append(formatFileDateInGMT(this.timeModified));
+        if (this.timeModified.toMillis() - this.timePublished.toMillis() > 60000) {
+            fileDating.append("\u00a0~(").append(formatFileDateInGMT(this.timePublished)).append(")");
+        }
+        fileDating.append("\u00a0GMT");
         fileData.appendElement("div").attr("class", "source-modification")
-                .appendElement("span").attr("class", "milliseconds-date").text(formatFileDateInGMT(this.timeModified));
+                .appendElement("span").attr("class", "milliseconds-date")
+                .text(fileDating.toString());
         if (copyRight != null) {
             String years;
-            int yearCreated = getGMTYear(timeCreated.toMillis());
+            int yearCreated = getGMTYear(timePublished.toMillis());
             int yearModified = getGMTYear(this.timeModified.toMillis());
             if (yearCreated >= yearModified) {
                 years = String.format("%04d", yearModified);

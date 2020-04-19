@@ -1,7 +1,6 @@
 package org.emmef.cms.main;
 
 import com.google.common.collect.ImmutableList;
-import jdk.nashorn.internal.ir.annotations.Immutable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.page.PageException;
@@ -157,7 +156,7 @@ public class Pages {
         long mostRecentModified = 0;
         List<PageRecord> result = new ArrayList<>();
         for (PageRecord page : pages) {
-            mostRecentCreated = Math.max(page.getTimeCreated().toMillis(), mostRecentCreated);
+            mostRecentCreated = Math.max(page.getTimePublished().toMillis(), mostRecentCreated);
             mostRecentModified = Math.max(page.getTimeModified().toMillis(), mostRecentModified);
             result.add(page);
         }
