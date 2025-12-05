@@ -528,7 +528,8 @@ public class PageRecord {
         if (!children.isEmpty()) {
             writeLinks(null, nav, children, "children");
         }
-        writeLinks(null, nav, siblings, "siblings");
+
+//        writeLinks(null, nav, siblings, "siblings");
 
         header.appendElement("div")
                 .attr("id", "article-title")
