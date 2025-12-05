@@ -9,10 +9,11 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <version-java>1.8</version-java>
-        <version-lombok>1.18.12</version-lombok>
+        <version-java-source>21</version-java-source>
+        <version-java-target>21</version-java-target>
+        <version-lombok>1.18.36</version-lombok>
         <version-slf4j>1.7.25</version-slf4j>
-        <version-guava>22.0</version-guava>
+        <version-guava>33.2.1-jre</version-guava>
     </properties>
 
     <build>
@@ -20,10 +21,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.6.1</version>
+                <version>3.13.0</version>
                 <configuration>
-                    <source>${version-java}</source>
-                    <target>${version-java}</target>
+                    <source>${version-java-source}</source>
+                    <target>${version-java-target}</target>
                 </configuration>
             </plugin>
             <plugin>
@@ -72,14 +73,14 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>32.0.0-jre</version>
+            <version>${version-guava}</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/commons-lang/commons-lang -->
-        <dependency>
-            <groupId>commons-lang</groupId>
-            <artifactId>commons-lang</artifactId>
-            <version>2.6</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>commons-lang</groupId>-->
+<!--            <artifactId>commons-lang</artifactId>-->
+<!--            <version>2.6</version>-->
+<!--        </dependency>-->
         <dependency>
             <groupId>joda-time</groupId>
             <artifactId>joda-time</artifactId>
@@ -88,7 +89,7 @@
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
-            <version>1.14.2</version>
+            <version>1.7.2</version>
         </dependency>
     </dependencies>
 </project>
