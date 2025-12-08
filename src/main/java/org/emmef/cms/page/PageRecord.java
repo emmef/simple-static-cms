@@ -37,7 +37,6 @@ public class PageRecord {
     private static final int MAX_GENERATED_LENGTH = MAX_NAME_LENGTH - HTML_SUFFIX.length();
 
     public static final String PAGE_SCHEME = "page:";
-    public static final String ELEMENT_SCHEME = "elem:";
     public static final String REF_SCHEME = "ref:";
     public static final String NOTE_SCHEME = "note:";
     public static final String NOTE_ELEMENT = "aside";
@@ -48,7 +47,10 @@ public class PageRecord {
     public static final String LATEST_ARTICLE_ELEMENT = "section";
     public static final String LATEST_ARTICLE_ID = "latest-articles";
 
-    public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive("meta");
+	public static final Predicate<Element> HTML = NodeHelper.elementByNameCaseInsensitive("html");
+	public static final Predicate<Element> LANGUAGE = HTML.and(ByAttributeValue.literal("name", "lang", false));
+
+	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive("meta");
     public static final Predicate<Element> META_UUID = META.and(ByAttributeValue.literal("name", "scms-uuid", true));
     public static final Predicate<Element> META_PARENT_UUID = META.and(ByAttributeValue.literal("name", "scms-parent-uuid", true));
     public static final Predicate<Element> META_MATH = META.and(ByAttributeValue.literal("name", "scms-uses-math", true));
@@ -153,6 +155,9 @@ public class PageRecord {
         Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
         FileTime modifiedTime;
         this.id = getIdentifier(head, META_UUID, "page identifier", null);
+		Element html = sourceDocument.getElementsByTag("html").first();
+		String language = html != null ? html.attr("lang") : null;
+		String htmlDeclaration = language != null ? "<html lang=\"" + language + "\"></html>" : "<html></html>";
         this.title = getTitle(head);
         this.math = Boolean.parseBoolean(getMetaValue(head, META_MATH));
         this.index = Boolean.parseBoolean(getMetaValue(head, META_INDEX));
@@ -169,8 +174,7 @@ public class PageRecord {
         if (sourceBody == null) {
             throw new PageException("Page has no article!");
         }
-
-        this.document = Jsoup.parse("<!DOCTYPE html><html></html>");
+        this.document = Jsoup.parse("<!DOCTYPE html>" + htmlDeclaration);
         this.header = this.document.createElement("header");
         this.article = this.document.createElement("article");
         this.footer = this.document.createElement("footer");
@@ -524,7 +528,8 @@ public class PageRecord {
         if (!children.isEmpty()) {
             writeLinks(null, nav, children, "children");
         }
-        writeLinks(null, nav, siblings, "siblings");
+
+//        writeLinks(null, nav, siblings, "siblings");
 
         header.appendElement("div")
                 .attr("id", "article-title")
