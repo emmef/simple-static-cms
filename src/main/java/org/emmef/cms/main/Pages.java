@@ -21,12 +21,12 @@ public class Pages {
     private static final Pattern HTML_PATTERN = Pattern.compile("\\.html?$", Pattern.CASE_INSENSITIVE);
     public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
 
-    public static Pages readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight) throws IOException {
+    public static Pages readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull String uuidRelativeLinks) throws IOException {
         Map<UUID, PageRecord> collectedPages = new HashMap<>();
         Map<UUID, PageRecord> duplicatePages = new HashMap<>();
         List<Path> toCopy = new ArrayList<>();
 
-        collectPages(source, source, collectedPages, duplicatePages, toCopy, 3);
+        collectPages(source, source, collectedPages, duplicatePages, toCopy, 3, uuidRelativeLinks);
 
         createHierarchy(collectedPages);
         createRootSiblings(collectedPages.values(), duplicatePages.values());
@@ -166,7 +166,7 @@ public class Pages {
     }
 
 
-    private static void collectPages(Path rootPath, @NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels) throws IOException {
+    private static void collectPages(Path rootPath, @NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels, @NonNull String uuidRelativeLinks) throws IOException {
         List<Path> subDirectories = new ArrayList<>();
         AtomicReference<Boolean> hadIndex = new AtomicReference<>(Boolean.FALSE);
         Files.list(source).forEach((file) -> {
@@ -181,7 +181,7 @@ public class Pages {
 
                 if (levels > 0 && HTML_PATTERN.matcher(name).find()) {
                     try {
-                        PageRecord pageRecord = readFile(rootPath, file);
+                        PageRecord pageRecord = readFile(rootPath, file, uuidRelativeLinks);
                         UUID id = pageRecord.getId();
                         if (collectedPages.containsKey(id)) {
                             PageRecord duplicated = collectedPages.get(id);
@@ -227,7 +227,7 @@ public class Pages {
         });
 
         for (Path subDir : subDirectories) {
-            collectPages(rootPath, subDir, collectedPages, duplicatePages, toCopy, Math.max(levels - 1, 0));
+            collectPages(rootPath, subDir, collectedPages, duplicatePages, toCopy, Math.max(levels - 1, 0), uuidRelativeLinks);
         }
     }
 
@@ -239,16 +239,16 @@ public class Pages {
         pages.forEach((page) -> page.replaceLastArticlesReference(sortedPages));
     }
 
-    private static PageRecord readFile(Path rootPath, Path path) throws IOException {
+    private static PageRecord readFile(Path rootPath, Path path, @NonNull String uuidRelativeLinks) throws IOException {
         try (InputStream fileStream = new FileInputStream(path.toFile())) {
-            return getPageRecordFromStream(rootPath, fileStream, path);
+            return getPageRecordFromStream(rootPath, fileStream, path, uuidRelativeLinks);
         }
 
     }
 
-    private static PageRecord getPageRecordFromStream(Path rootPath, InputStream fileStream, Path path) throws IOException {
+    private static PageRecord getPageRecordFromStream(Path rootPath, InputStream fileStream, Path path, @NonNull String uuidRelativeLinks) throws IOException {
         Document document = Jsoup.parse(fileStream, "UTF-8", "");
 
-        return new PageRecord(document, path, rootPath);
+        return new PageRecord(document, path, rootPath, uuidRelativeLinks);
     }
 }
