@@ -151,34 +151,54 @@ public class PageRecord {
 			if (pageLink == null) {
 				return;
 			}
-
-			String localId = pageLink.getLocalId();
+			boolean isThisPage = pageLink.getUuid() == indexedPage.getId();
+			PageRecord pageRecord = pages.get(pageLink.getUuid());
+			String relativeLink;
 			IndexedPage page;
-			if (pageLink.getUuid() == indexedPage.getId()) {
-				if (localId == null) {
-					removeReference(anchor);
-					return;
-				}
+			if (isThisPage) {
+				relativeLink = null;
 				page = indexedPage;
 			}
 			else {
-				PageRecord pageRecord = pages.get(pageLink.getUuid());
 				if (pageRecord == null) {
 					removeReference(anchor);
 					return;
 				}
-				page = pageRecord.getIndexedPage();
+				relativeLink = pageRecord.getDynamicFilename();
+				page = pageRecord.indexedPage;
 			}
+
+			String localId = pageLink.getLocalId();
+			if (localId == null || localId.isBlank()) {
+				if (isThisPage) {
+					removeReference(anchor);
+					return;
+				}
+				else if (pageRecord == null) {
+					removeReference(anchor);
+					return;
+				}
+				else {
+					anchor.attr("href", relativeLink);
+					if (anchor.text().isBlank()) {
+						anchor.text(pageRecord.getIndexedPage().getTitle());
+					}
+				}
+				return;
+			}
+
+			String newRef = (relativeLink != null ? relativeLink : "") + DocumentUtils.LOCAL_LINK + localId;
 
 			IndexedPage.Note note = page.getNoteById().get(localId);
 			if (note != null) {
 				if (anchor.text().isBlank()) {
 					anchor.addClass("reference-ptr");
-					if (pageLink.getUuid() != indexedPage.getId()) {
-						anchor.text("*" + note.number());
+					if (isThisPage) {
+						anchor.text(Integer.toString(note.number()));
 					}
 					else {
-						anchor.text(Integer.toString(note.number()));
+						anchor.text("*" + note.number());
+						anchor.attr("href", newRef);
 					}
 				}
 				return;
@@ -188,6 +208,9 @@ public class PageRecord {
 			if (!captionById.containsKey(localId)) {
 				removeReference(anchor);
 				return;
+			}
+			if (!isThisPage) {
+				anchor.attr("href", newRef);
 			}
 			if (anchor.text().isBlank()) {
 				String caption = captionById.get(localId);
@@ -212,24 +235,6 @@ public class PageRecord {
 			return PageLink.of(indexedPage.getId(), href.substring(1));
 		}
 		return null;
-	}
-
-	private void elementTextReplacement(String refPageTitle, Element n) {
-		String content = n.text();
-		if (content == null || content.isEmpty()) {
-			n.text(refPageTitle);
-		} else {
-			switch (content.trim()) {
-				case ":title":
-					n.text(refPageTitle);
-					break;
-				case ":title-lower":
-					n.text(refPageTitle.toLowerCase());
-					break;
-				default:
-					// No replacement
-			}
-		}
 	}
 
 	public void setParent(PageRecord parent) {
