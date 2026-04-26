@@ -1,5 +1,6 @@
 package org.emmef.cms.main;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.ExtraArgumentStrategy;
 import org.emmef.cms.parameters.Parameter;
@@ -14,8 +15,11 @@ import java.nio.file.attribute.PosixFilePermissions;
 
 @Slf4j
 public class Main {
+    public static final String UUID_RELATIVE_LINKS_DEFAULT = "/uuid/";
+
     public static final Parameter HELP = Parameter.flag("help");
     public static final Parameter SOURCE = Parameter.single("source-root").withDescription("Contains the sources to generate pages from").mandatory().withShorthand("S");
+    public static final Parameter UUID_RELATIVE_LINKS = Parameter.single("uuid-relative-links").withDescription("Links that start with this will link are assumed to link to the page with the uuid").withDefault(UUID_RELATIVE_LINKS_DEFAULT).withShorthand("U");
     public static final Parameter TARGET = Parameter.single("target").withDescription("The output directory of pages").mandatory().withShorthand("T");
     public static final Parameter COPYRIGHT = Parameter.single("copyright").withDescription("Copyright holder").withShorthand("C");
 
@@ -23,6 +27,7 @@ public class Main {
             HELP,
             SOURCE,
             TARGET,
+            UUID_RELATIVE_LINKS,
             COPYRIGHT);
 
     public static void main(String arg[]) throws IOException {
@@ -54,6 +59,19 @@ public class Main {
             Files.createDirectory(target, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
         }
 
-        Pages.readSourceGenerateOutput(source, target, copyRight);
+        String uuidRelativeLinks = obtainUuidRelativeLinks(results.getValue(UUID_RELATIVE_LINKS));
+
+        Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks);
+    }
+
+    private @NonNull String obtainUuidRelativeLinks(String value) {
+        if (value == null || value.isBlank()) {
+            return UUID_RELATIVE_LINKS_DEFAULT;
+        }
+        String normalized = Path.of(value).normalize().toString();
+        if (normalized.endsWith("/")) {
+            return normalized;
+        }
+        return  normalized + "/";
     }
 }
