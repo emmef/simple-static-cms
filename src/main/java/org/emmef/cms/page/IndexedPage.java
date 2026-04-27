@@ -20,6 +20,12 @@ import java.util.stream.Collectors;
 import static org.emmef.cms.page.DocumentUtils.*;
 import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
 
+/**
+ * TODO Page summary
+ * The page summary is cloned and will replace local links with absolute links that will be visited.
+ * TODO Links last
+ * The replacement of links will happen at the last possible moment on all pages.
+ */
 public class IndexedPage {
 	public static final Predicate<Element> META_UUID = META.and(ByAttributeValue.literal("name", "scms-uuid", true));
 	public static final Predicate<Element> META_PARENT_UUID = META.and(ByAttributeValue.literal("name", "scms-parent-uuid", true));
