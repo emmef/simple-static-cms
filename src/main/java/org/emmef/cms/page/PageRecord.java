@@ -20,6 +20,14 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
+/**
+ * TODO A page will contain tags in link tags in the header
+ * TODO Links will be maintained in a html file with header levels that must have an id attribute that will be the tag-id
+ * TODO Tags will be defined in the article with <link href="tags.html#tag-id" rel="bookmark">
+ * TODO Navigation will be replaced with the most important tag on top and a hellip button to move to the bottom where all tags are
+ * TODO Selecting a tag will go to the tag page that contains the tag name, its parent tags and its child tags, and then a list of articles either alphabetical or recent-based
+ * TODO The tags.html will be regenerated with links to tag pages, with one pseudo tag for non-tagged pages.
+ */
 @Slf4j
 public class PageRecord {
 	private static final String reservedChars = "|\\?*<:>+[]/";
