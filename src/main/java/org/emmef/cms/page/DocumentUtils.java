@@ -19,7 +19,7 @@ public class DocumentUtils {
 	public static final String NOTE_ELEMENT = "aside";
 	public static final String ANCHOR_ELEMENT = "a";
 	public static final Character LOCAL_LINK = '#';
-	public static final String ANCHOR_HREF = "a";
+	public static final String ANCHOR_HREF = "href";
 	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive("meta");
 
 	public static Element getNodeByTag(Document document, String tagName, NodeExpectation expectation) {
