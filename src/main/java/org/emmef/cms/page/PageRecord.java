@@ -469,8 +469,8 @@ public class PageRecord {
 		for (IndexedPage.Note note : notes) {
 			Element node = note.node();
 			Element reference = referenceList.appendElement("tr")
-					.attr("class", "reference reference-item")
-					.attr("id", node.id());
+					.attr("class", "reference reference-item");
+//					.attr("id", node.id());
 			reference.appendElement("td")
 					.attr("class", "reference reference-item-number")
 					.text(Integer.toString(note.number()));
