@@ -5,6 +5,7 @@ import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.util.*;
+import org.joda.time.DateTime;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
 import org.jsoup.nodes.Document;
@@ -14,10 +15,8 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 /**
@@ -68,8 +67,6 @@ public class PageRecord {
 	private final Path rootPath;
 	@NonNull
 	private final Document document;
-	@NonNull
-	private final Element article;
 	private List<Node> summary;
 	@NonNull
 	private final Element footer;
@@ -96,11 +93,11 @@ public class PageRecord {
 		return new Comparator<PageRecord>() {
 			@Override
 			public int compare(PageRecord p1, PageRecord p2) {
-				double createP1 = Math.log(Math.max(1, mostRecentCreated - p1.getIndexedPage().getTimePublished().toMillis()));
-				double createP2 = Math.log(Math.max(1, mostRecentCreated - p2.getIndexedPage().getTimePublished().toMillis()));
+				double createP1 = Math.log(Math.max(1, mostRecentCreated - p1.getIndexedPage().getTimePublished().getMillis()));
+				double createP2 = Math.log(Math.max(1, mostRecentCreated - p2.getIndexedPage().getTimePublished().getMillis()));
 				double createValue = createP1 - createP2;
-				double modP1 = Math.log(Math.max(1, mostRecentModified - p1.getIndexedPage().getTimeModified().toMillis()));
-				double modP2 = Math.log(Math.max(1, mostRecentModified - p2.getIndexedPage().getTimeModified().toMillis()));
+				double modP1 = Math.log(Math.max(1, mostRecentModified - p1.getIndexedPage().getTimeModified().getMillis()));
+				double modP2 = Math.log(Math.max(1, mostRecentModified - p2.getIndexedPage().getTimeModified().getMillis()));
 				double modValue = modP1 - modP2;
 
 				double value = createValue * 10 + modValue;
@@ -131,7 +128,7 @@ public class PageRecord {
 		}
 		this.document = Jsoup.parse("<!DOCTYPE html>" + htmlDeclaration);
 		this.header = this.document.createElement("header");
-		this.article = this.document.createElement("article");
+		this.document.appendChild(indexedPage.getArticle());
 		this.footer = this.document.createElement("footer");
 		this.path = path;
 
@@ -149,87 +146,13 @@ public class PageRecord {
 	}
 
 	public void replacePageReferences(@NonNull Map<UUID, PageRecord> pages) {
-		indexedPage.visitAnchors(anchor -> {
-			String href = anchor.attr("href");
-			if (href.isBlank()) {
-				removeReference(anchor);
-				return;
-			}
-			PageLink pageLink = getPageLink(href);
-			if (pageLink == null) {
-				return;
-			}
-			boolean isThisPage = pageLink.getUuid() == indexedPage.getId();
-			PageRecord pageRecord = pages.get(pageLink.getUuid());
-			String relativeLink;
-			IndexedPage page;
-			if (isThisPage) {
-				relativeLink = null;
-				page = indexedPage;
-			}
-			else {
-				if (pageRecord == null) {
-					removeReference(anchor);
-					return;
-				}
-				relativeLink = pageRecord.getDynamicFilename();
-				page = pageRecord.indexedPage;
-			}
-
-			String localId = pageLink.getLocalId();
-			if (localId == null || localId.isBlank()) {
-				if (isThisPage) {
-					removeReference(anchor);
-					return;
-				}
-				else if (pageRecord == null) {
-					removeReference(anchor);
-					return;
-				}
-				else {
-					anchor.attr("href", relativeLink);
-					if (anchor.text().isBlank()) {
-						anchor.text(pageRecord.getIndexedPage().getTitle());
-					}
-				}
-				return;
-			}
-
-			String newRef = (relativeLink != null ? relativeLink : "") + DocumentUtils.LOCAL_LINK + localId;
-
-			IndexedPage.Note note = page.getNoteById().get(localId);
-			if (note != null) {
-				if (anchor.text().isBlank()) {
-					anchor.addClass("reference-ptr");
-					if (isThisPage) {
-						anchor.text(Integer.toString(note.number()));
-					}
-					else {
-						anchor.text("*" + note.number());
-						anchor.attr("href", newRef);
-					}
-				}
-				return;
-			}
-
-			Map<String, String> captionById = page.getCaptionById();
-			if (!captionById.containsKey(localId)) {
-				removeReference(anchor);
-				return;
-			}
-			if (!isThisPage) {
-				anchor.attr("href", newRef);
-			}
-			if (anchor.text().isBlank()) {
-				String caption = captionById.get(localId);
-				anchor.text(caption == null || caption.isBlank() ? "???" : caption);
-			}
-		});
+		indexedPage.replacePageReferences(pages);
 
 		appendReferences();
 	}
 
 	private static void removeReference(Element anchor) {
+		log.info("Convert anchor to span:{} ", anchor);
 		anchor.tagName("span");
 		anchor.removeAttr("href");
 	}
@@ -406,7 +329,7 @@ public class PageRecord {
 				.attr("id", "article-title")
 				.text(generateTitleTrail());
 
-		body.appendChild(article);
+		body.appendChild(indexedPage.getArticle());
 
 		addDateAndCopyright(copyRight);
 		if (footer.children().size() != 0) {
@@ -562,10 +485,10 @@ public class PageRecord {
 	private void addDateAndCopyright(String copyRight) {
 		Element fileData = footer.appendElement("div").attr("class", "file-data");
 		StringBuilder fileDating = new StringBuilder();
-		FileTime timePublished = indexedPage.getTimePublished();
-		FileTime timeModified = indexedPage.getTimeModified();
+		DateTime timePublished = indexedPage.getTimePublished();
+		DateTime timeModified = indexedPage.getTimeModified();
 		fileDating.append(formatFileDateInGMT(timeModified));
-		if (timeModified.toMillis() - timePublished.toMillis() > 60000) {
+		if (timeModified.getMillis() - timePublished.getMillis() > 60000) {
 			fileDating.append("\u00a0~(").append(formatFileDateInGMT(timePublished)).append(")");
 		}
 		fileDating.append("\u00a0GMT");
@@ -574,8 +497,8 @@ public class PageRecord {
 				.text(fileDating.toString());
 		if (copyRight != null) {
 			String years;
-			int yearCreated = getGMTYear(timePublished.toMillis());
-			int yearModified = getGMTYear(timeModified.toMillis());
+			int yearCreated = getGMTYear(timePublished.getMillis());
+			int yearModified = getGMTYear(timeModified.getMillis());
 			if (yearCreated >= yearModified) {
 				years = String.format("%04d", yearModified);
 			} else {
@@ -586,8 +509,8 @@ public class PageRecord {
 		}
 	}
 
-	private String formatFileDateInGMT(FileTime timeModified1) {
-		return DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified1.toMillis()).toZonedDateTime());
+	private String formatFileDateInGMT(DateTime timeModified1) {
+		return DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified1.getMillis()).toZonedDateTime());
 	}
 
 	public void replaceLastArticlesReference(List<PageRecord> sortedPages) {
@@ -639,7 +562,7 @@ public class PageRecord {
 		item
 				.appendElement("div").attr("class", "latest-article-date")
 				.appendElement("span").attr("class", "milliseconds-age")
-				.text(Long.toString(indexedPage.getTimeModified().toMillis()));
+				.text(Long.toString(indexedPage.getTimeModified().getMillis()));
 
 		item
 				.appendElement("div")
@@ -668,7 +591,7 @@ public class PageRecord {
 	}
 
 	private List<Node> summarizeText() {
-		Element p = NodeHelper.deepGetFirst(article,
+		Element p = NodeHelper.deepGetFirst(indexedPage.getArticle(),
 				Element.class, e -> {
 					if (e == null) {
 						return false;
@@ -752,6 +675,26 @@ public class PageRecord {
 		} catch (RuntimeException e) {
 			return null;
 		}
+	}
+
+	public UUID getId() {
+		return indexedPage.getId();
+	}
+
+	public String getTitle() {
+		return indexedPage.getTitle();
+	}
+
+	public UUID getParentId() {
+		return parent != null ? parent.getId() : null;
+	}
+
+	public DateTime getTimePublished() {
+		return indexedPage.getTimePublished();
+	}
+
+	public DateTime getTimeModified() {
+		return indexedPage.getTimeModified();
 	}
 
 	private class LocalToRelativeLinkVisitor implements NodeVisitor {

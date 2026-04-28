@@ -20,6 +20,10 @@ public class PageReferrals {
 		this.hrefs = ANCHOR.and(ByAttributeValue.startsWith("href", this.startsWith));
 	}
 
+	public String getStartsWith() {
+		return startsWith;
+	}
+
 	public static String normalize(@NonNull UUID uuid, String localId) {
 		return localId != null ? uuid + "#" + localId : uuid.toString();
 	}

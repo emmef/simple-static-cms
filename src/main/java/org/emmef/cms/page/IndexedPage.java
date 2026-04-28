@@ -3,8 +3,10 @@ package org.emmef.cms.page;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.util.ByAttributeValue;
+import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -26,6 +28,7 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
  * TODO Links last
  * The replacement of links will happen at the last possible moment on all pages.
  */
+@Slf4j
 public class IndexedPage {
 	public static final Predicate<Element> META_UUID = META.and(ByAttributeValue.literal("name", "scms-uuid", true));
 	public static final Predicate<Element> META_PARENT_UUID = META.and(ByAttributeValue.literal("name", "scms-parent-uuid", true));
@@ -38,6 +41,7 @@ public class IndexedPage {
 	public static final String LATEST_ARTICLE_ID = "latest-articles";
 	public static final String SUMMARY_ELEMENT = "p";
 	public static final String SUMMARY_ID = "article-summary";
+	public static final DateTime ZERO_DATE = new DateTime(0);
 
 	@Getter
 	private final PageReferrals pageReferrals;
@@ -64,9 +68,9 @@ public class IndexedPage {
 	@Getter
 	private final @NonNull Map<String, String> captionById;
 	@Getter
-	private final FileTime timeModified;
+	private final DateTime timeModified;
 	@Getter
-	private final FileTime timePublished;
+	private final DateTime timePublished;
 
 	public IndexedPage(Document document, @NonNull PageReferrals pageReferrals) {
 		this.pageReferrals = pageReferrals;
@@ -95,12 +99,7 @@ public class IndexedPage {
 		this.noteById = createNotesById(notes);
 		this.latestArticles = searchForLatestArticles(article);
 		this.summary = searchForSummary(article);
-		removeNotes(sourceDocument);
-	}
-
-	public void visitAnchors(@NonNull Consumer<Element> onAnchor) {
-		article.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor);
-		noteById.values().forEach(v -> v.node.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor));
+		removeNotes(article);
 	}
 
 	private static @NonNull Element getArticle(Document sourceDocument) {
@@ -140,7 +139,7 @@ public class IndexedPage {
 		return notes;
 	}
 
-	private void removeNotes(Document sourceDocument) {
+	private void removeNotes(Element sourceDocument) {
 		List<Node> nodes = new ArrayList<>();
 		sourceDocument.getAllElements().forEach(node -> {
 			if (!NOTE_ELEMENT.equalsIgnoreCase(node.nodeName())) {
@@ -170,17 +169,18 @@ public class IndexedPage {
 
 	private void scanReferences(Set<PageLink> pages, @NonNull Element sourceDocument, List<Element> notes) {
 		@NonNull Map<String, Element> notesFirstScan = createNotesById(sourceDocument);
-		handleReferences(article, pages, notesFirstScan, notes);
+		Set<String> referred = new HashSet<>();
+		handleReferences(article, pages, notesFirstScan, notes, referred);
 		int noteCount;
 		do {
 			noteCount = notes.size();
 			new ArrayList<>(notes).forEach(note -> {
-				handleReferences(note, pages, notesFirstScan, notes);
+				handleReferences(note, pages, notesFirstScan, notes, referred);
 			});
-		} while(noteCount != notes.size());
+		} while (noteCount != notes.size());
 	}
 
-	private void handleReferences(Element element, Set<PageLink> pages, @NonNull Map<String, Element> notesFirstScan, List<Element> notes) {
+	private void handleReferences(Element element, Set<PageLink> pages, @NonNull Map<String, Element> notesFirstScan, List<Element> notes, Set<String> referred) {
 		element.getElementsByTag(ANCHOR_ELEMENT).forEach(node -> {
 			String href = node.attr(ANCHOR_HREF);
 			if (href == null || href.isBlank()) {
@@ -192,8 +192,9 @@ public class IndexedPage {
 			else {
 				String id = href.substring(1);
 				Element note = notesFirstScan.get(id);
-				if (note != null) {
+				if (note != null && !referred.contains(id)) {
 					notes.add(note);
+					referred.add(id);
 				}
 			}
 		});
@@ -224,17 +225,131 @@ public class IndexedPage {
 		return summary;
 	}
 
-	private FileTime getFileTime(Node head, Predicate<Element> metaDatePredicate) {
+	private DateTime getFileTime(Node head, Predicate<Element> metaDatePredicate) {
 		String metaPublishedDate = DocumentUtils.getMetaValue(head, metaDatePredicate);
 		if (metaPublishedDate == null) {
-			return null;
+			return ZERO_DATE;
 		}
 		try {
-			return FileTime.fromMillis(
-					ISODateTimeFormat.dateTimeParser().parseDateTime(metaPublishedDate).toDate().getTime());
+			return ISODateTimeFormat.dateTimeParser().parseDateTime(metaPublishedDate);
 		} catch (RuntimeException e) {
-			return null;
+			return ZERO_DATE;
 		}
+	}
+
+	public void replacePageReferences(@NonNull Map<UUID, PageRecord> pages) {
+		visitAnchors(anchor -> {
+			String href = anchor.attr("href");
+			if (href.isBlank()) {
+				removeReference(anchor);
+				return;
+			}
+			PageLink pageLink = getPageLink(href);
+			if (pageLink == null) {
+				return;
+			}
+			boolean isThisPage = pageLink.getUuid() == getId();
+			PageRecord pageRecord = pages.get(pageLink.getUuid());
+			String relativeLink;
+			IndexedPage page;
+			if (isThisPage) {
+				relativeLink = null;
+				page = this;
+			}
+			else {
+				if (pageRecord == null) {
+					removeReference(anchor);
+					return;
+				}
+				relativeLink = pageRecord.getDynamicFilename();
+				page = pageRecord.getIndexedPage();
+			}
+
+			String localId = pageLink.getLocalId();
+			if (localId == null || localId.isBlank()) {
+				if (isThisPage) {
+					removeReference(anchor);
+					return;
+				}
+				else if (pageRecord == null) {
+					removeReference(anchor);
+					return;
+				}
+				else {
+					anchor.attr("href", relativeLink);
+					if (anchor.text().isBlank()) {
+						anchor.text(pageRecord.getIndexedPage().getTitle());
+					}
+				}
+				return;
+			}
+
+			String newRef = (relativeLink != null ? relativeLink : "") + DocumentUtils.LOCAL_LINK + localId;
+
+			IndexedPage.Note note = page.getNoteById().get(localId);
+			if (note != null) {
+				if (anchor.text().isBlank()) {
+					anchor.addClass("reference-ptr");
+					if (isThisPage) {
+						anchor.text(Integer.toString(note.number()));
+					}
+					else {
+						anchor.text("*" + note.number());
+						anchor.attr("href", newRef);
+					}
+				}
+				return;
+			}
+
+			Map<String, String> captionById = page.getCaptionById();
+			if (!captionById.containsKey(localId)) {
+				removeReference(anchor);
+				return;
+			}
+			if (!isThisPage) {
+				anchor.attr("href", newRef);
+			}
+			if (anchor.text().isBlank() || "=".equals(anchor.text())) {
+				createCaption(anchor, pageRecord, localId, false);
+			}
+			else if ("_".equals(anchor.text())) {
+				createCaption(anchor, pageRecord, localId, true);
+			}
+		});
+	}
+
+	private static void createCaption(Element anchor, PageRecord pageRecord, String localId, boolean lowerCase) {
+		String caption = pageRecord.getIndexedPage().getCaptionById().get(localId);
+		if (caption == null || caption.isBlank()) {
+			anchor.text("???");
+		}
+		else if (lowerCase) {
+			anchor.text(caption.toLowerCase());
+		}
+		else {
+			anchor.text(caption);
+		}
+	}
+
+	private static void removeReference(Element anchor) {
+		anchor.tagName("span");
+		anchor.removeAttr("href");
+	}
+
+	private PageLink getPageLink(@NonNull String href) {
+		PageLink pageLink = getPageReferrals().of(href);
+		if (pageLink != null) {
+			return pageLink;
+		}
+		if (href.charAt(0) == DocumentUtils.LOCAL_LINK) {
+			return PageLink.of(getId(), href.substring(1));
+		}
+		return null;
+	}
+
+	private void visitAnchors(@NonNull Consumer<Element> onAnchor) {
+		article.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor);
+		noteById.values().forEach(v -> v.node.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor));
 	}
 
 	public record Note(@NonNull Element node, @NonNull Integer number) {
