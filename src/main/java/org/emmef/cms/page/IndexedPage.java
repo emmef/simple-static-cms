@@ -11,6 +11,7 @@ import org.joda.time.format.ISODateTimeFormat;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
+import org.jsoup.parser.Tag;
 
 import java.nio.file.attribute.FileTime;
 import java.util.*;
@@ -27,6 +28,12 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
  * The page summary is cloned and will replace local links with absolute links that will be visited.
  * TODO Links last
  * The replacement of links will happen at the last possible moment on all pages.
+ * TODO Handle ref: links
+ * An anchor <a href="ref:URL">Text</a> must be replaced by
+ * 	 - <a href="#ref_id_1"></a>
+ * 	 - Note element: <aside id="ref_id_1">Teext</aside>
+ *
+ *
  */
 @Slf4j
 public class IndexedPage {
@@ -42,6 +49,7 @@ public class IndexedPage {
 	public static final String SUMMARY_ELEMENT = "p";
 	public static final String SUMMARY_ID = "article-summary";
 	public static final DateTime ZERO_DATE = new DateTime(0);
+	public static final String MAKE_LINK_FOOTNOTE = "ref:";
 
 	@Getter
 	private final PageReferrals pageReferrals;
@@ -182,7 +190,7 @@ public class IndexedPage {
 
 	private void handleReferences(Element element, Set<PageLink> pages, @NonNull Map<String, Element> notesFirstScan, List<Element> notes, Set<String> referred) {
 		element.getElementsByTag(ANCHOR_ELEMENT).forEach(node -> {
-			String href = node.attr(ANCHOR_HREF);
+			String href = node.attr(ANCHOR_HREF).trim();
 			if (href == null || href.isBlank()) {
 				return;
 			}
@@ -190,11 +198,34 @@ public class IndexedPage {
 			if (pageLink != null)
 				pages.add(pageLink);
 			else {
-				String id = href.substring(1);
-				Element note = notesFirstScan.get(id);
-				if (note != null && !referred.contains(id)) {
-					notes.add(note);
-					referred.add(id);
+				if (href.startsWith(MAKE_LINK_FOOTNOTE)) {
+					if (notesFirstScan.containsKey(href)) {
+						node.attr("href", DocumentUtils.LOCAL_LINK + notesFirstScan.get(href).id());
+						node.text("");
+					}
+					else {
+						String url = href.substring(MAKE_LINK_FOOTNOTE.length());
+						String id = "ref_note_style_" + notes.size();
+						Element note = new Element(Tag.valueOf("aside"), "top");
+						Element clone = node.clone();
+						clone.attr("href", url);
+						note.appendChild(clone);
+						note.attr("id", id);
+						node.attr(ANCHOR_HREF, DocumentUtils.LOCAL_LINK + id);
+						node.text("");
+						notes.add(note);
+						referred.add(id);
+						notesFirstScan.put(href, note);
+						notesFirstScan.put(id, note);
+					}
+				}
+				else {
+					String id = href.substring(1);
+					Element note = notesFirstScan.get(id);
+					if (note != null && !referred.contains(id)) {
+						notes.add(note);
+						referred.add(id);
+					}
 				}
 			}
 		});
@@ -207,7 +238,7 @@ public class IndexedPage {
 			String id = element.attr("id");
 			results.put(id, new Note(element, i + 1));
 		}
-		return Collections.unmodifiableMap(results);
+		return results;
 	}
 
 	private @NonNull Element searchForSummary(Element sourceBody) {
@@ -238,6 +269,7 @@ public class IndexedPage {
 	}
 
 	public void replacePageReferences(@NonNull Map<UUID, PageRecord> pages) {
+		AtomicInteger refCounter  = new AtomicInteger(0);
 		visitAnchors(anchor -> {
 			String href = anchor.attr("href");
 			if (href.isBlank()) {
