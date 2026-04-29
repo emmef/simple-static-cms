@@ -13,10 +13,10 @@ import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.parser.Tag;
 
-import java.nio.file.attribute.FileTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -28,12 +28,6 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
  * The page summary is cloned and will replace local links with absolute links that will be visited.
  * TODO Links last
  * The replacement of links will happen at the last possible moment on all pages.
- * TODO Handle ref: links
- * An anchor <a href="ref:URL">Text</a> must be replaced by
- * 	 - <a href="#ref_id_1"></a>
- * 	 - Note element: <aside id="ref_id_1">Teext</aside>
- *
- *
  */
 @Slf4j
 public class IndexedPage {
@@ -50,6 +44,7 @@ public class IndexedPage {
 	public static final String SUMMARY_ID = "article-summary";
 	public static final DateTime ZERO_DATE = new DateTime(0);
 	public static final String MAKE_LINK_FOOTNOTE = "ref:";
+	public static final Function<String, UUID> TO_UUID = uuid -> UUID.fromString(uuid);
 
 	@Getter
 	private final PageReferrals pageReferrals;
@@ -84,13 +79,14 @@ public class IndexedPage {
 		this.pageReferrals = pageReferrals;
 		Document sourceDocument = document.clone();
 		Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
-		this.id = getIdentifier(head, META_UUID, "page identifier", null);
-		this.parentId = getIdentifier(head, META_PARENT_UUID, "parent identifier", NULL_PATTERN);
+
+		this.id = DocumentUtils.getMetaValue(head, "scms-uuid", "page identifier", TO_UUID);
+		this.parentId = DocumentUtils.getMetaValueOrNull(head, "scms-parent-uuid", "page parent identifier", TO_UUID);
 		this.title = DocumentUtils.getTitle(head);
-		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValue(head, META_MATH));
-		this.index = Boolean.parseBoolean(DocumentUtils.getMetaValue(head, META_INDEX));
-		this.timePublished = getFileTime(head, META_PUBLISH_DATE);
-		this.timeModified = getFileTime(head, META_REPUBLISH_DATE);
+		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, "scms-uses-math", "Math usage", Function.identity()));
+		this.index = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, "scms-is-index", "Math usage", Function.identity()));
+		this.timePublished = getTime(head, "scms-published-date");
+		this.timeModified = getTime(head, "scms-republish-date");
 		if (id == parentId) {
 			throw new PageException("Parent identifier cannot be your own identifier");
 		}
@@ -256,18 +252,6 @@ public class IndexedPage {
 		return summary;
 	}
 
-	private DateTime getFileTime(Node head, Predicate<Element> metaDatePredicate) {
-		String metaPublishedDate = DocumentUtils.getMetaValue(head, metaDatePredicate);
-		if (metaPublishedDate == null) {
-			return ZERO_DATE;
-		}
-		try {
-			return ISODateTimeFormat.dateTimeParser().parseDateTime(metaPublishedDate);
-		} catch (RuntimeException e) {
-			return ZERO_DATE;
-		}
-	}
-
 	public void replacePageReferences(@NonNull Map<UUID, PageRecord> pages) {
 		AtomicInteger refCounter  = new AtomicInteger(0);
 		visitAnchors(anchor -> {
@@ -382,6 +366,11 @@ public class IndexedPage {
 	private void visitAnchors(@NonNull Consumer<Element> onAnchor) {
 		article.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor);
 		noteById.values().forEach(v -> v.node.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor));
+	}
+
+	private static DateTime getTime(@NonNull Node head, @NonNull String name) {
+		DateTime timeStamp = getMetaValueOrNull(head, name, "time stamp", v -> ISODateTimeFormat.dateTimeParser().parseDateTime(v));
+		return timeStamp != null ? timeStamp : ZERO_DATE;
 	}
 
 	public record Note(@NonNull Element node, @NonNull Integer number) {
