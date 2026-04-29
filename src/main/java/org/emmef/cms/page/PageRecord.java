@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 /**
  * TODO A page will contain tags in link tags in the header
@@ -32,28 +33,16 @@ public class PageRecord {
 	private static final String reservedChars = "|\\?*<:>+[]/";
 	private static final int MAX_NAME_LENGTH = 255;
 	private static final String HTML_SUFFIX = ".html";
-	private static final int MAX_GENERATED_LENGTH = MAX_NAME_LENGTH - HTML_SUFFIX.length();
 
-	public static final String PAGE_SCHEME = "page:";
-	public static final String REF_SCHEME = "ref:";
-	public static final String NOTE_SCHEME = "note:";
 	public static final String SUMMARY_ELEMENT = "p";
 	public static final String SUMMARY_ID = "article-summary";
 
-	public static final Predicate<Element> HTML = NodeHelper.elementByNameCaseInsensitive("html");
-	public static final Predicate<Element> LANGUAGE = HTML.and(ByAttributeValue.literal("name", "lang", false));
-
-
-	public static final Predicate<Element> ANCHOR = NodeHelper.elementByNameCaseInsensitive("a");
-	public static final Predicate<Element> ANCHOR_REF = ANCHOR.and(ByAttributeValue.startsWith("href", REF_SCHEME));
-	public static final Predicate<Element> ELEMENT_WITH_ID = NodeHelper.elementByNamesCaseInsensitive("h1", "h2", "h3", "dt", "figcaption").and(ByAttributeValue.isUuid("id"));
-
 	public static final String NBSP = "" + Entities.NBSP;
 	public static final String STYLE_CSS = "./style/simple-static-cms.css";
-	public static final String CSS_TARGET_TYPE = "simple-static-cms-style-type";
 	public static final String PAGE_COPYRIGHT = "copyright";
 	public static final String REFERENCE_LIST = "reference-list";
-	public static final String NOTE_NUMBER = "note-number";
+	public static final Pattern PATTERN_NOT_ALPHANUMERIC = Pattern.compile("[^\\p{Alnum}]");
+	public static final Pattern PATTERN_UPPER = Pattern.compile("[\\p{Upper}]");
 
 	private final Element header;
 
@@ -72,8 +61,6 @@ public class PageRecord {
 	private final Element footer;
 	private boolean index;
 
-	@Getter
-	private PageRecord parent = null;
 	private final SortedSet<PageRecord> children = createPageSet();
 	private SortedSet<PageRecord> siblings = null;
 	private String dynamicFilename = null;
@@ -168,10 +155,6 @@ public class PageRecord {
 		return null;
 	}
 
-	public void setParent(PageRecord parent) {
-		this.parent = parent;
-	}
-
 	public boolean addChild(@NonNull PageRecord rec) {
 		return children.add(rec);
 	}
@@ -192,60 +175,28 @@ public class PageRecord {
 		index = false;
 	}
 
-	public List<PageRecord> getParents(boolean reverse) {
-		List<PageRecord> list = new ArrayList<>();
-		PageRecord parent = this.parent;
-		while (parent != null) {
-			if (reverse) {
-				list.add(parent);
-			} else {
-				list.add(0, parent);
-			}
-			parent = parent.parent;
-		}
-
-		return list;
-	}
-
 	public void setSiblings(@NonNull SortedSet<PageRecord> siblings) {
 		this.siblings = Collections.unmodifiableSortedSet(siblings);
-	}
-
-	public boolean isIndex() {
-		return parent == null && index;
 	}
 
 	public String getDynamicFilename() {
 		if (dynamicFilename != null) {
 			return dynamicFilename;
 		}
-		List<PageRecord> parents = getParents(true);
-		StringBuilder name = new StringBuilder();
-		String title = indexedPage.getTitle();
-		appendNormalized(name, title);
-		if (!parents.isEmpty()) {
-			parents.forEach(p -> {
-				if (Character.isUpperCase(p.getIndexedPage().getTitle().charAt(0))) {
-					name.append("_-");
-				} else {
-					name.append("_-_");
-				}
-				appendNormalized(name, p.getIndexedPage().getTitle());
-			});
-		}
-		if (name.length() > MAX_GENERATED_LENGTH) {
-			name.setLength(MAX_GENERATED_LENGTH);
-		}
-		;
-		name.append(".html");
+		String suffix = ".html";
+		String relativePath =
+				rootPath.relativize(path).toString();
+		String withoutSuffix = relativePath.substring(0, relativePath.length() - suffix.length());
+
+		String underscored = PATTERN_NOT_ALPHANUMERIC.matcher(withoutSuffix).replaceAll("_");
+		String name = PATTERN_UPPER.matcher(underscored).replaceAll(result -> {
+			return "_" + result.group(0);
+		});
 		int i = 0;
 		while (i < name.length() && name.charAt(i) == '_') {
 			i++;
 		}
-		name.delete(0, i);
-		name.insert(0, '/');
-		name.insert(0, '.');
-		dynamicFilename = name.toString();
+		dynamicFilename = "./" + name.substring(i) + suffix;
 
 		return dynamicFilename;
 	}
@@ -296,38 +247,18 @@ public class PageRecord {
 		Element body = document.body();
 		body.attr("onload", "EmmefUtil.init();");
 		body.appendChild(header);
-		Element nav = header.appendElement("nav");
+		Element nav = header.appendElement("nav").appendElement("table").attr("style", "width=100%;").appendElement("tr");
 
-		List<PageRecord> parents = getParents(false);
-		List<PageRecord> self = Collections.singletonList(this);
-		List<PageRecord> siblings = new ArrayList<>();
-		getSiblings().forEach(p -> {
-			if (p != this) {
-				siblings.add(p);
-			}
-		});
-
-		ArrayList<PageRecord> children = new ArrayList<>(getChildren());
-		addPermaLink(nav);
 		nav.appendElement("span")
 				.attr("onclick", "EmmefUtil.contrast()")
 				.attr("class", "contrast-setter")
-				.html("&#x25E9");
-
-
-		if (!parents.isEmpty()) {
-			writeLinks(null, nav, parents, "parents");
-		}
-		writeLinks(this, nav, self, "current");
-		if (!children.isEmpty()) {
-			writeLinks(null, nav, children, "children");
-		}
-
-//        writeLinks(null, nav, siblings, "siblings");
-
+				.html("◩");
+		nav.appendElement("div").attr("class", "tag-navigation")
+				.appendElement("span").text("TAG1").appendElement("span").text("TAG2").appendElement("span").text("TAG3");
 		header.appendElement("div")
 				.attr("id", "article-title")
 				.text(generateTitleTrail());
+
 
 		body.appendChild(indexedPage.getArticle());
 
@@ -337,86 +268,40 @@ public class PageRecord {
 		}
 	}
 
-	private void addPermaLink(Element nav) {
-		String imageStyles = duplicate ? "permalink-disabled" : "permalink-enabled";
-
-		if (!duplicate) {
-			nav.appendElement("a")
-					.attr("href", indexedPage.getId().toString() + ".html")
-					.attr("class", imageStyles)
-					.attr("title", "Permanent link")
-					.text("" + Entities.ODOT);
-		} else {
-			nav.appendElement("span")
-					.attr("class", imageStyles)
-					.attr("title", "Permanent link")
-					.text("" + Entities.ODOT);
-		}
-	}
-
 	private String generateTitleTrail() {
 		return generateTitleTrail(true);
 	}
 
 	private String generateTitleTrail(boolean showTopmost) {
-		StringBuilder output = new StringBuilder();
-		output.append(indexedPage.getTitle());
-
-		PageRecord parent = getParent();
-		if (parent != null) {
-			output.append(Entities.NBSP).append(Entities.MDASH).append(" ");
-			parentTitle(output, parent, showTopmost);
-		}
-
-		return output.toString();
+		return indexedPage.getTitle();
 	}
-
-	public String parentTitle(boolean showTopmost) {
-		if (parent != null) {
-			StringBuilder output = new StringBuilder();
-			parentTitle(output, parent, showTopmost);
-			return output.toString();
-		}
-		return "";
-	}
-
-	private static void parentTitle(StringBuilder output, PageRecord page, boolean showTopmost) {
-		PageRecord parent = page.getParent();
-		if (parent != null) {
-			if (parent.parent != null || showTopmost) {
-				parentTitle(output, parent, showTopmost);
-				output.append(Entities.NBSP).append("/ ");
-			}
-		}
-		output.append(page.getIndexedPage().getTitle());
-	}
-
-	private void writeLinks(PageRecord self, Element nav, List<PageRecord> pages, String baseClass) {
-		int size = pages.size();
-		if (size == 0) {
-			return;
-		}
-		for (int i = 0; i < size; i++) {
-			PageRecord page = pages.get(i);
-			boolean isFirst = i == 0;
-			boolean isLast = i == size - 1;
-			boolean isSelf = self != null && PageRecord.COMPARE_BY_NAME.compare(page, self) == 0;
-
-			if (isFirst) {
-				nav.appendElement("span").attr(
-						"class", createClasses(
-								baseClass, "separator", true, false, false));
-			}
-			nav.appendElement("a")
-					.attr("href", page.getDynamicFilename())
-					.attr("class", createClasses(baseClass, "element", isFirst, isLast, isSelf))
-					.text(page.getIndexedPage().getTitle());
-
-			nav.appendElement("span").attr(
-					"class", createClasses(
-							baseClass, "separator", false, isLast, false));
-		}
-	}
+//
+//	private void writeLinks(PageRecord self, Element nav, List<PageRecord> pages, String baseClass) {
+//		int size = pages.size();
+//		if (size == 0) {
+//			return;
+//		}
+//		for (int i = 0; i < size; i++) {
+//			PageRecord page = pages.get(i);
+//			boolean isFirst = i == 0;
+//			boolean isLast = i == size - 1;
+//			boolean isSelf = self != null && PageRecord.COMPARE_BY_NAME.compare(page, self) == 0;
+//
+//			if (isFirst) {
+//				nav.appendElement("span").attr(
+//						"class", createClasses(
+//								baseClass, "separator", true, false, false));
+//			}
+//			nav.appendElement("a")
+//					.attr("href", page.getDynamicFilename())
+//					.attr("class", createClasses(baseClass, "element", isFirst, isLast, isSelf))
+//					.text(page.getIndexedPage().getTitle());
+//
+//			nav.appendElement("span").attr(
+//					"class", createClasses(
+//							baseClass, "separator", false, isLast, false));
+//		}
+//	}
 
 	private String createClasses(String baseClass, String subClass, boolean isFirst, boolean isLast, boolean isSelf) {
 		StringBuilder classes = new StringBuilder();
@@ -442,16 +327,6 @@ public class PageRecord {
 				.append(" ").append(baseClass).append("-").append(position)
 				.append(" ").append(subClass).append("-").append(position)
 				.append(" ").append(baseClass).append("-").append(subClass).append("-").append(position);
-	}
-
-	private SortedSet<PageRecord> getSiblings() {
-		if (siblings != null) {
-			return siblings;
-		}
-		if (parent != null) {
-			return parent.getChildren();
-		}
-		return Collections.emptySortedSet();
 	}
 
 	private Element appendReferences() {
@@ -522,9 +397,9 @@ public class PageRecord {
 		PageRecord self = this;
 		sortedPages.forEach((p) -> {
 			List<Node> s = p.ensureSummary();
-			if (p.isChildOf(self) && orderedChildren.size() < 10 && s != null && !s.isEmpty()) {
-				orderedChildren.add(p);
-			}
+//			if (p.isChildOf(self) && orderedChildren.size() < 10 && s != null && !s.isEmpty()) {
+//				orderedChildren.add(p);
+//			}
 		});
 		if (orderedChildren.isEmpty()) {
 			return;
@@ -535,51 +410,51 @@ public class PageRecord {
 	}
 
 	private void addArticle(Element articleList, PageRecord page) {
-		List<Node> s = page.ensureSummary();
-		if (s == null) {
-			return;
-		}
-		Element item = articleList.appendElement("div");
-		if (articleList.children().size() == 1) {
-			item.attr("class", "latest-articles-item latest-articles-item-first");
-		} else {
-			item.attr("class", "latest-articles-item latest-articles-item-subsequent");
-		}
-		String categoryLink = page.parent != null ? page.parent.getDynamicFilename() : null;
-		Element categoryDiv = item
-				.appendElement("div")
-				.attr("class", "latest-article-category");
-		if (categoryLink != null) {
-			categoryDiv.appendElement("a")
-					.attr("href", categoryLink)
-					.attr("class", "latest-article-category")
-					.text(page.parentTitle(false));
-		} else {
-			categoryDiv.text(page.parentTitle(false));
-		}
-
-
-		item
-				.appendElement("div").attr("class", "latest-article-date")
-				.appendElement("span").attr("class", "milliseconds-age")
-				.text(Long.toString(indexedPage.getTimeModified().getMillis()));
-
-		item
-				.appendElement("div")
-				.attr("class", "latest-article-title")
-				.appendElement("a")
-				.attr("class", "latest-article-link")
-				.attr("href", page.getDynamicFilename())
-				.text(page.getIndexedPage().getTitle());
-
-//        Element summaryAndDate = item.appendElement("div").attr("class", "latest-article-content");
-
-		Element summary = item
-				.appendElement("div").attr("class", "latest-article-summary");
-		for (Node n : s) {
-			summary.appendChild(n.clone());
-		}
-
+//		List<Node> s = page.ensureSummary();
+//		if (s == null) {
+//			return;
+//		}
+//		Element item = articleList.appendElement("div");
+//		if (articleList.children().size() == 1) {
+//			item.attr("class", "latest-articles-item latest-articles-item-first");
+//		} else {
+//			item.attr("class", "latest-articles-item latest-articles-item-subsequent");
+//		}
+//		String categoryLink = page.parent != null ? page.parent.getDynamicFilename() : null;
+//		Element categoryDiv = item
+//				.appendElement("div")
+//				.attr("class", "latest-article-category");
+//		if (categoryLink != null) {
+//			categoryDiv.appendElement("a")
+//					.attr("href", categoryLink)
+//					.attr("class", "latest-article-category")
+//					.text(page.parentTitle(false));
+//		} else {
+//			categoryDiv.text(page.parentTitle(false));
+//		}
+//
+//
+//		item
+//				.appendElement("div").attr("class", "latest-article-date")
+//				.appendElement("span").attr("class", "milliseconds-age")
+//				.text(Long.toString(indexedPage.getTimeModified().getMillis()));
+//
+//		item
+//				.appendElement("div")
+//				.attr("class", "latest-article-title")
+//				.appendElement("a")
+//				.attr("class", "latest-article-link")
+//				.attr("href", page.getDynamicFilename())
+//				.text(page.getIndexedPage().getTitle());
+//
+////        Element summaryAndDate = item.appendElement("div").attr("class", "latest-article-content");
+//
+//		Element summary = item
+//				.appendElement("div").attr("class", "latest-article-summary");
+//		for (Node n : s) {
+//			summary.appendChild(n.clone());
+//		}
+//
 	}
 
 	public List<Node> ensureSummary() {
@@ -612,21 +487,6 @@ public class PageRecord {
 		}
 		return summary.isEmpty() ? Collections.emptyList() : summary;
 	}
-
-	private boolean isChildOf(PageRecord supposedParent) {
-		if (supposedParent == null) {
-			return false;
-		}
-		PageRecord p = this.parent;
-		while (p != null) {
-			if (p.getIndexedPage().getId().equals(supposedParent.getIndexedPage().getId())) {
-				return true;
-			}
-			p = p.parent;
-		}
-		return false;
-	}
-
 
 	private int getGMTYear(long millis) {
 		GregorianCalendar calendar = getCalendarInGMT(millis);
@@ -685,16 +545,20 @@ public class PageRecord {
 		return indexedPage.getTitle();
 	}
 
-	public UUID getParentId() {
-		return parent != null ? parent.getId() : null;
-	}
-
 	public DateTime getTimePublished() {
 		return indexedPage.getTimePublished();
 	}
 
 	public DateTime getTimeModified() {
 		return indexedPage.getTimeModified();
+	}
+
+	public void replaceId(@NonNull UUID newId) {
+		indexedPage.replaceId(newId);
+	}
+
+	public boolean isIndex() {
+		return indexedPage.isIndex();
 	}
 
 	private class LocalToRelativeLinkVisitor implements NodeVisitor {
