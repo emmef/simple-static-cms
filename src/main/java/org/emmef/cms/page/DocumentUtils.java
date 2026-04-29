@@ -9,8 +9,11 @@ import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.select.Elements;
 
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 public class DocumentUtils {
@@ -20,7 +23,8 @@ public class DocumentUtils {
 	public static final String ANCHOR_ELEMENT = "a";
 	public static final Character LOCAL_LINK = '#';
 	public static final String ANCHOR_HREF = "href";
-	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive("meta");
+	public static final String META_TAG = "meta";
+	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive(META_TAG);
 
 	public static Element getNodeByTag(Document document, String tagName, NodeExpectation expectation) {
 
@@ -49,30 +53,39 @@ public class DocumentUtils {
 		return title.trim().replaceAll("\\s+", " ").replaceAll("\\s", PageRecord.NBSP);
 	}
 
-	public static UUID getIdentifier(@NonNull Node head, @NonNull Predicate<Element> predicate, @NonNull String description, Pattern nullPattern) {
-		String uuidText = getMetaValue(head, predicate);
-		if (uuidText == null) {
-			throw new PageException("Missing " + description);
-		}
-		UUID uuid;
-		try {
-			uuid = UUID.fromString(uuidText);
-		} catch (IllegalArgumentException e) {
-			if (nullPattern != null && nullPattern.matcher(uuidText).matches()) {
-				return null;
+	public static <T> @NonNull T getMetaValue(@NonNull Node head, @NonNull String nameValue, @NonNull String description, @NonNull Function<String, T> converter) {
+		return getMetaValue(head, nameValue, v -> {
+			if (v == null) {
+				throw new PageException("Missing meta tag named \"" + nameValue + "\" for " + description);
 			}
-			throw new PageException("While parsing " + description + ": " + e.getMessage());
-		}
-		return uuid;
+			else if (v.isBlank()) {
+				throw new PageException("Empty meta tag named \"" + nameValue + "\" for " + description);
+			}
+
+			try {
+				T apply = converter.apply(v.toString());
+				if (apply == null) {
+					throw new IllegalStateException("Null converted value for meta tag named \"" + nameValue + "\" for " + description + ":" + v);
+				}
+				return apply;
+			} catch (IllegalArgumentException e) {
+				throw new PageException("Invalid value for meta tag named \"" + nameValue + "\" for " + description + ":" + v + "\n" + e);
+			}
+		});
 	}
 
-	public static String getMetaValue(Node head, Predicate<Element> predicate) {
-		Node meta = NodeHelper.searchFirst(head, predicate);
-		if (meta == null) {
-			return null;
-		}
-		String value = meta.attr("value");
-		return value.isEmpty() ? null : value;
+	public static <T> T getMetaValueOrNull(@NonNull Node head, @NonNull String nameValue, @NonNull String description, @NonNull Function<String, T> converter) {
+		return getMetaValue(head, nameValue, v -> {
+			if (v == null || v.isBlank()) {
+				return null;
+			}
+
+			try {
+				return converter.apply(v.toString());
+			} catch (IllegalArgumentException e) {
+				throw new PageException("Invalid value for meta tag named \"" + nameValue + "\" for " + description + ":" + v + "\n" + e);
+			}
+		});
 	}
 
 	public static String getContent(Node head, Predicate<Element> predicate) {
@@ -80,19 +93,19 @@ public class DocumentUtils {
 		return meta != null ? meta.text() : null;
 	}
 
-	public static Element getAcceptedTagAndIdElementOrNull(@NonNull Node node, @NonNull String tagName, @NonNull String idValue) {
-		return getAcceptedElementOrNull(node, NodeHelper.elementByNameCaseInsensitive(tagName).and((e) -> idValue.equalsIgnoreCase(e.attr("id"))));
+
+	public static <T> T getMetaValue(@NonNull Node head, @NonNull String nameValue, @NonNull Function<String, T> converter) {
+		return converter.apply(getRawMetaValue(head, nameValue));
 	}
 
-	public static Element getAcceptedTagElementOrNull(@NonNull Node node, @NonNull String tagName, @NonNull Predicate<Element> predicate) {
-		return getAcceptedElementOrNull(node, NodeHelper.elementByNameCaseInsensitive(tagName).and(predicate));
-	}
+	private static String getRawMetaValue(@NonNull Node head, @NonNull String nameValue) {
+		Optional<Node> node = head.childNodes()
+				.stream()
+				.filter(e -> META_TAG.equalsIgnoreCase(e.nodeName()))
+				.filter(e -> nameValue.equalsIgnoreCase(e.attr("name")))
+				.findFirst();
 
-	public static Element getAcceptedElementOrNull(@NonNull Node node, @NonNull Predicate<Element> predicate) {
-		if (!(node instanceof Element)) {
-			return null;
-		}
-		Element element = (Element) node;
-		return predicate.test(element) ? element : null;
+
+		return node.isPresent() ? node.get().attr("value") : null;
 	}
 }
