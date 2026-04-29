@@ -15,6 +15,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 import static java.nio.file.Files.isDirectory;
@@ -30,8 +31,6 @@ public class Pages {
 		List<Path> toCopy = new ArrayList<>();
 		collectPages(source, source, collectedPages, duplicatePages, toCopy, 3, uuidRelativeLinks);
 
-		createHierarchy(collectedPages);
-		createRootSiblings(collectedPages.values(), duplicatePages.values());
 		List<PageRecord> orderedPages = createOrderedPages(collectedPages.values());
 		replacePageReferences(collectedPages, collectedPages);
 		replacePageReferences(duplicatePages, collectedPages);
@@ -44,10 +43,10 @@ public class Pages {
 		cache.put(PageRecord.PAGE_COPYRIGHT, copyRight);
 
 		collectedPages.values().forEach((page) -> {
-			generatePageOutput(target, true, page, collectedNames, cache);
+			generatePageOutput(target, page, collectedNames, cache);
 		});
 		duplicatePages.values().forEach((page) -> {
-			generatePageOutput(target, false, page, collectedNames, cache);
+			generatePageOutput(target, page, collectedNames, cache);
 		});
 
 		toCopy.forEach(file -> {
@@ -68,85 +67,20 @@ public class Pages {
 		return null;
 	}
 
-	private static void generatePageOutput(@NonNull Path target, boolean createPermanentFile, @NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache) {
+	private static void generatePageOutput(@NonNull Path target, @NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache) {
 		Path dynamicPath = target.resolve(page.getDynamicFilename());
-		Path permanentPath = target.resolve(page.getId().toString() + ".html");
-		boolean success = false;
 		if (!collectedNames.contains(dynamicPath)) {
 			try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
 				log.info("Wrote " + page + " to file " + dynamicPath);
 
 				page.writePage(output, cache);
-				success = true;
 				collectedNames.add(dynamicPath);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			if (success) {
-				try {
-					Files.setPosixFilePermissions(dynamicPath, ATTRIBUTES);
-					if (createPermanentFile) {
-						try {
-							Files.copy(dynamicPath, permanentPath, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-					}
-					String fileName = dynamicPath.getFileName().toString();
-					boolean index = page.isIndex();
-					if (index && !"index.html".equalsIgnoreCase(fileName)) {
-						try {
-							Path resolve = target.resolve("index.html");
-							Files.copy(dynamicPath, resolve, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
-							Files.setPosixFilePermissions(resolve, ATTRIBUTES);
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
 		} else {
 			log.error("NOT writing page \"{}\" [{}] with already existing title", page.getTitle(), page.getId());
 		}
-	}
-
-
-	private static void createHierarchy(Map<UUID, PageRecord> index) {
-		index.values().forEach((page) -> {
-			UUID parentId = page.getParentId();
-			if (parentId != null) {
-				PageRecord parent = index.get(parentId);
-				if (parent != null) {
-					parent.addChild(page);
-					page.setParent(parent);
-					log.info("Relation PARENT \"{}\" [{}] (\"{}\") CHILD \"{}\" [{}] ({})",
-							parent.getTitle(), parent.getId(), parent.getPath(),
-							page.getTitle(), page.getId(), page.getPath());
-				} else {
-					log.warn("Page \"{}\" [{}] ([]) has non-existent parent [{}]: attched to root",
-							page.getTitle(), page.getId(), page.getPath(), parentId);
-					page.setParent(null);
-				}
-			}
-		});
-	}
-
-	private static void createRootSiblings(@NonNull Collection<PageRecord>... index) {
-		TreeSet<PageRecord> rootPages = PageRecord.createPageSet();
-		for (Collection<PageRecord> coll : index) {
-			coll.forEach((page) -> {
-				if (page.getParentId() == null) {
-					if (rootPages.add(page)) {
-						log.info("Added root " + page);
-					} else {
-						log.warn("NOT added duplicate root " + page);
-					}
-				}
-			});
-		}
-		rootPages.forEach((root) -> root.setSiblings(rootPages));
 	}
 
 	private static List<PageRecord> createOrderedPages(Collection<PageRecord> pages) {
@@ -163,7 +97,7 @@ public class Pages {
 		return ImmutableList.copyOf(result);
 	}
 
-	private static @NonNull Set<Path> collectPageFiles(@NonNull Path source, @NonNull PageReferrals uuidRelativeLinks, List<Path> toCopy, int levels) {
+	private static @NonNull SortedSet<Path> collectPageFiles(@NonNull Path source, @NonNull PageReferrals uuidRelativeLinks, List<Path> toCopy, int levels) {
 		List<Directory> subDirectories = new ArrayList<>();
 		subDirectories.add(new Directory(source, 1));
 		Set<Path> result = new HashSet<>();
@@ -211,30 +145,55 @@ public class Pages {
 
 					RuntimeException(e);
 		}
-		return result;
+		SortedSet<Path> sortedResult = new TreeSet<>();
+		result.forEach(p -> sortedResult.add(p.normalize()));
+		return sortedResult;
 	}
 
 	private static void collectPages(Path rootPath, @NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
-		Set<Path> files = collectPageFiles(source, uuidRelativeLinks, toCopy, levels);
-		AtomicBoolean hadIndex = new AtomicBoolean(false);
+		SortedSet<Path> files = collectPageFiles(source, uuidRelativeLinks, toCopy, levels);
+		boolean hadIndex = false;
+		Path directory = null;
 		for (Path file : files) {
+			Path myDirectory = file.getParent();
+			if (!myDirectory.equals(directory)) {
+				hadIndex = false;
+			}
 			try {
 				PageRecord pageRecord = readFile(rootPath, file, uuidRelativeLinks);
+
 				UUID id = pageRecord.getId();
-				if (!collectedPages.containsKey(id)) {
-					collectedPages.put(pageRecord.getId(), pageRecord);
-					continue;
+				if (collectedPages.containsKey(id)) {
+					PageRecord duplicated = collectedPages.get(id);
+					log.warn("Duplicate id {} for \n  1. \"{}\" ({})\n  2.\"{}\"' ({}) duplicates INDEX page \"{}\" ({})",
+							id, duplicated.getTitle(), duplicated.getPath(), pageRecord.getTitle(), file);
+					pageRecord.replaceId(createUniqueNameBasedId(collectedPages, pageRecord));
 				}
-				PageRecord duplicated = collectedPages.get(id);
-				log.warn("Duplicate id {} for \n  1. \"{}\" ({})\n  2.\"{}\"' ({}) duplicates INDEX page \"{}\" ({})",
-						id, duplicated.getTitle(), duplicated.getPath(), pageRecord.getTitle(), file);
-				duplicatePages.put(id, pageRecord);
+				if (pageRecord.isIndex()) {
+					if (hadIndex) {
+						pageRecord.resetIndex();
+					}
+					hadIndex = true;
+				}
+				collectedPages.put(pageRecord.getId(), pageRecord);
 			} catch (PageException e) {
 				log.error("Not a valid source file: " + file, e);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	private static @NonNull UUID createUniqueNameBasedId(Map<UUID, PageRecord> collectedPages, PageRecord pageRecord) {
+		UUID newId;
+		AtomicInteger index = new AtomicInteger();
+		do {
+			int idx = index.getAndIncrement();
+			String title = idx == 0 ? pageRecord.getTitle() : pageRecord.getTitle() + idx;
+			newId = UUID.fromString(title);
+		}
+		while (collectedPages.containsKey(newId));
+		return newId;
 	}
 
 	private static void replacePageReferences(Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> index) {

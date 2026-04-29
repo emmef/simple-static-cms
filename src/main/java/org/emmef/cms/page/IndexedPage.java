@@ -1,5 +1,6 @@
 package org.emmef.cms.page;
 
+import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
@@ -8,11 +9,13 @@ import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.util.ByAttributeValue;
 import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.parser.Tag;
 
+import java.net.URLEncoder;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -31,12 +34,11 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
  */
 @Slf4j
 public class IndexedPage {
-	public static final Predicate<Element> META_UUID = META.and(ByAttributeValue.literal("name", "scms-uuid", true));
-	public static final Predicate<Element> META_PARENT_UUID = META.and(ByAttributeValue.literal("name", "scms-parent-uuid", true));
-	public static final Predicate<Element> META_MATH = META.and(ByAttributeValue.literal("name", "scms-uses-math", true));
-	public static final Predicate<Element> META_INDEX = META.and(ByAttributeValue.literal("name", "scms-is-index", true));
-	public static final Predicate<Element> META_PUBLISH_DATE = META.and(ByAttributeValue.literal("name", "scms-published-date", true));
-	public static final Predicate<Element> META_REPUBLISH_DATE = META.and(ByAttributeValue.literal("name", "scms-republish-date", true));
+	public static final String META_UUID = "scms-uuid";
+	public static final String META_MATH = "scms-uses-math";
+	public static final String META_INDEX = "scms-is-index";
+	public static final String META_PUBLISH_DATE = "scms-published-date";
+	public static final String META_REPUBLISH_DATE = "scms-republish-date";
 	public static final Set<String> CAPTION_ELEMENTS = new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER).add("h1", "h2", "h3", "h4", "h5", "h6", "figcaption").build();
 	public static final String LATEST_ARTICLE_ELEMENT = "section";
 	public static final String LATEST_ARTICLE_ID = "latest-articles";
@@ -49,9 +51,7 @@ public class IndexedPage {
 	@Getter
 	private final PageReferrals pageReferrals;
 	@Getter
-	private final @NonNull UUID id;
-	@Getter
-	private final UUID parentId;
+	private @NonNull UUID id;
 	@Getter
 	private final @NonNull String title;
 	@Getter
@@ -80,16 +80,12 @@ public class IndexedPage {
 		Document sourceDocument = document.clone();
 		Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
 
-		this.id = DocumentUtils.getMetaValue(head, "scms-uuid", "page identifier", TO_UUID);
-		this.parentId = DocumentUtils.getMetaValueOrNull(head, "scms-parent-uuid", "page parent identifier", TO_UUID);
+		this.id = DocumentUtils.getMetaValue(head, META_UUID, "page identifier", TO_UUID);
 		this.title = DocumentUtils.getTitle(head);
-		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, "scms-uses-math", "Math usage", Function.identity()));
-		this.index = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, "scms-is-index", "Math usage", Function.identity()));
-		this.timePublished = getTime(head, "scms-published-date");
-		this.timeModified = getTime(head, "scms-republish-date");
-		if (id == parentId) {
-			throw new PageException("Parent identifier cannot be your own identifier");
-		}
+		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, META_MATH, "tex support", Function.identity()));
+		this.index = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, META_INDEX, "is index", Function.identity()));
+		this.timePublished = getTime(head, META_PUBLISH_DATE);
+		this.timeModified = getTime(head, META_REPUBLISH_DATE);
 		this.article = getArticle(sourceDocument);
 		this.article.tagName("article");
 
@@ -201,7 +197,7 @@ public class IndexedPage {
 					}
 					else {
 						String url = href.substring(MAKE_LINK_FOOTNOTE.length());
-						String id = "ref_note_style_" + notes.size();
+						String id = URLEncoder.encode( "footnotes::" + notes.size(), Charsets.UTF_8);
 						Element note = new Element(Tag.valueOf("aside"), "top");
 						Element clone = node.clone();
 						clone.attr("href", url);
@@ -371,6 +367,10 @@ public class IndexedPage {
 	private static DateTime getTime(@NonNull Node head, @NonNull String name) {
 		DateTime timeStamp = getMetaValueOrNull(head, name, "time stamp", v -> ISODateTimeFormat.dateTimeParser().parseDateTime(v));
 		return timeStamp != null ? timeStamp : ZERO_DATE;
+	}
+
+	public void replaceId(@NonNull UUID newId) {
+		id = newId;
 	}
 
 	public record Note(@NonNull Element node, @NonNull Integer number) {
