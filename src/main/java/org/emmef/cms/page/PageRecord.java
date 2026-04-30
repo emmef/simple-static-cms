@@ -1,9 +1,7 @@
 package org.emmef.cms.page;
 
-import com.google.common.collect.Multimap;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.util.*;
 import org.joda.time.DateTime;
 import org.jsoup.Jsoup;
@@ -17,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 /**
@@ -38,7 +35,7 @@ public class PageRecord {
 	public static final String SUMMARY_ID = "article-summary";
 
 	public static final String NBSP = "" + Entities.NBSP;
-	public static final String STYLE_CSS = "./style/simple-static-cms.css";
+	public static final String STYLE_CSS = "/style/simple-static-cms.css";
 	public static final String PAGE_COPYRIGHT = "copyright";
 	public static final String REFERENCE_LIST = "reference-list";
 	public static final Pattern PATTERN_NOT_ALPHANUMERIC = Pattern.compile("[^\\p{Alnum}]");
@@ -50,10 +47,7 @@ public class PageRecord {
 	private final @NonNull IndexedPage indexedPage;
 	@NonNull
 	@Getter
-	private final Path path;
-	@NonNull
-	@Getter
-	private final Path rootPath;
+	private final Path relativeOutputPath;
 	@NonNull
 	private final Document document;
 	private List<Node> summary;
@@ -63,8 +57,10 @@ public class PageRecord {
 
 	private final SortedSet<PageRecord> children = createPageSet();
 	private SortedSet<PageRecord> siblings = null;
-	private String dynamicFilename = null;
-	private boolean duplicate = false;
+	@Getter
+	private final String absoluteUrl;
+	@Getter
+	private final boolean isRoot;
 
 	public static final Comparator<PageRecord> COMPARE_BY_NAME = (p1, p2) -> {
 		String title1 = p1.getIndexedPage().getTitle();
@@ -99,37 +95,34 @@ public class PageRecord {
 		return new TreeSet<PageRecord>(COMPARE_BY_NAME);
 	}
 
-	public PageRecord(Document sourceDocument, Path path, Path rootPath, @NonNull PageReferrals pageReferrals) {
-		indexedPage = new IndexedPage(sourceDocument, pageReferrals);
-		Node head = DocumentUtils.getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
-		Element html = sourceDocument.getElementsByTag("html").first();
-		String language = html != null ? html.attr("lang") : null;
-		String htmlDeclaration = language != null ? "<html lang=\"" + language + "\"></html>" : "<html></html>";
-		if (index) {
-			System.out.println("INDEX " + indexedPage.getTitle());
-		}
-
-		Element sourceBody = (Element) DocumentUtils.getNodeByTag(sourceDocument, "body", NodeExpectation.UNIQUE);
-		if (sourceBody == null) {
-			throw new PageException("Page has no article!");
-		}
-		this.document = Jsoup.parse("<!DOCTYPE html>" + htmlDeclaration);
+	public PageRecord(IndexedPage page, Path filePath, Path rootPath) {
+		this.indexedPage = page;
+		this.document = Jsoup.parse(indexedPage.getHtmlDeclaration());
 		this.header = this.document.createElement("header");
 		this.document.appendChild(indexedPage.getArticle());
 		this.footer = this.document.createElement("footer");
-		this.path = path;
 
 		try {
-			rootPath.relativize(path);
+			String relativized = rootPath.relativize(filePath).toString();
+			String lowerCased = PATTERN_UPPER.matcher(relativized).replaceAll(result -> {
+				return "_" + result.group(0).toLowerCase();
+			});
+			this.relativeOutputPath = Path.of(lowerCased);
 		} catch (IllegalArgumentException e) {
 			throw new IllegalArgumentException(this + ": path not relative to root-path " + rootPath);
 		}
-		this.rootPath = rootPath;
-	}
+		String relativeUri = rootPath.resolve(relativeOutputPath).toUri().toString();
+		String rootUriUri = rootPath.toUri().toString();
+		if (!relativeUri.startsWith(rootUriUri)) {
+			throw new IllegalStateException(this + ": could not generate proper relative URL, as '" + relativeUri + "' does not start with '" + rootUriUri + "'");
+		}
+		this.absoluteUrl = "/" + relativeUri.substring(rootUriUri.length());
+		this.isRoot = "/index.html".equals(this.absoluteUrl);
+}
 
 	@Override
 	public String toString() {
-		return "Page \"" + indexedPage.getTitle() + "\" [" + indexedPage.getId() + "] (" + path.toString() + ")";
+		return "Page \"" + indexedPage.getTitle() + "\" [" + indexedPage.getId() + "] (" + relativeOutputPath.toString() + ")";
 	}
 
 	public void replacePageReferences(@NonNull Map<UUID, PageRecord> pages) {
@@ -163,47 +156,13 @@ public class PageRecord {
 		return Collections.unmodifiableSortedSet(children);
 	}
 
-	public boolean isDuplicate() {
-		return duplicate;
+	public String getAbsoluteUrl() {
+		return absoluteUrl;
 	}
 
-	public void markDuplicate() {
-		duplicate = true;
-	}
-
-	public void resetIndex() {
-		index = false;
-	}
-
-	public void setSiblings(@NonNull SortedSet<PageRecord> siblings) {
-		this.siblings = Collections.unmodifiableSortedSet(siblings);
-	}
-
-	public String getDynamicFilename() {
-		if (dynamicFilename != null) {
-			return dynamicFilename;
-		}
-		String suffix = ".html";
-		String relativePath =
-				rootPath.relativize(path).toString();
-		String withoutSuffix = relativePath.substring(0, relativePath.length() - suffix.length());
-
-		String underscored = PATTERN_NOT_ALPHANUMERIC.matcher(withoutSuffix).replaceAll("_");
-		String name = PATTERN_UPPER.matcher(underscored).replaceAll(result -> {
-			return "_" + result.group(0);
-		});
-		int i = 0;
-		while (i < name.length() && name.charAt(i) == '_') {
-			i++;
-		}
-		dynamicFilename = "./" + name.substring(i) + suffix;
-
-		return dynamicFilename;
-	}
-
-	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache) throws IOException {
+	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName) throws IOException {
 		addHead(cache);
-		addBody((String) cache.get(PAGE_COPYRIGHT));
+		addBody((String) cache.get(PAGE_COPYRIGHT), siteName);
 
 		Document.OutputSettings outputSettings = document.outputSettings();
 		outputSettings.charset(StandardCharsets.UTF_8);
@@ -238,21 +197,25 @@ public class PageRecord {
 		}
 		head.appendElement("script")
 				.attr("type", "text/javascript")
-				.attr("src", "./emmef-util.js?stamp=" + stamp);
+				.attr("src", "/emmef-util.js?stamp=" + stamp);
 
 		head.appendElement("title").text(generateTitleTrail());
 	}
 
-	private void addBody(String copyRight) {
+	private void addBody(String copyRight, String siteName) {
 		Element body = document.body();
 		body.attr("onload", "EmmefUtil.init();");
 		body.appendChild(header);
-		Element nav = header.appendElement("nav").appendElement("table").attr("style", "width=100%;").appendElement("tr");
+		Element nav = header.appendElement("nav");
 
 		nav.appendElement("span")
 				.attr("onclick", "EmmefUtil.contrast()")
 				.attr("class", "contrast-setter")
 				.html("◩");
+		nav.appendElement("a")
+				.attr("class", "site-link")
+				.attr("href", "/")
+				.html(siteName);
 		nav.appendElement("div").attr("class", "tag-navigation")
 				.appendElement("span").text("TAG1").appendElement("span").text("TAG2").appendElement("span").text("TAG3");
 		header.appendElement("div")
@@ -580,7 +543,7 @@ public class PageRecord {
 			if (href == null || !href.startsWith("#")) {
 				return;
 			}
-			String newHref = getDynamicFilename() + href;
+			String newHref = getAbsoluteUrl() + href;
 			e.attr("href", newHref);
 		}
 	}
