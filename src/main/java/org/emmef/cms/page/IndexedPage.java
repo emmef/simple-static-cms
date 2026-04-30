@@ -6,10 +6,8 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.parameters.NodeExpectation;
-import org.emmef.cms.util.ByAttributeValue;
 import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
@@ -20,7 +18,6 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static org.emmef.cms.page.DocumentUtils.*;
@@ -36,7 +33,6 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
 public class IndexedPage {
 	public static final String META_UUID = "scms-uuid";
 	public static final String META_MATH = "scms-uses-math";
-	public static final String META_INDEX = "scms-is-index";
 	public static final String META_PUBLISH_DATE = "scms-published-date";
 	public static final String META_REPUBLISH_DATE = "scms-republish-date";
 	public static final Set<String> CAPTION_ELEMENTS = new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER).add("h1", "h2", "h3", "h4", "h5", "h6", "figcaption").build();
@@ -74,16 +70,21 @@ public class IndexedPage {
 	private final DateTime timeModified;
 	@Getter
 	private final DateTime timePublished;
+	private final String htmlDeclaration;
 
-	public IndexedPage(Document document, @NonNull PageReferrals pageReferrals) {
+	public IndexedPage(Document document, @NonNull PageReferrals pageReferrals, boolean isIndex) {
 		this.pageReferrals = pageReferrals;
 		Document sourceDocument = document.clone();
-		Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
 
+		Element html = sourceDocument.getElementsByTag("html").first();
+		String language = html != null ? html.attr("lang") : null;
+		this.htmlDeclaration = STR."<!DOCTYPE html>\{language != null ? STR."<html lang=\"\{language}\"></html>" : "<html></html>"}";
+
+		Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
+		this.index = true;
 		this.id = DocumentUtils.getMetaValue(head, META_UUID, "page identifier", TO_UUID);
 		this.title = DocumentUtils.getTitle(head);
 		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, META_MATH, "tex support", Function.identity()));
-		this.index = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, META_INDEX, "is index", Function.identity()));
 		this.timePublished = getTime(head, META_PUBLISH_DATE);
 		this.timeModified = getTime(head, META_REPUBLISH_DATE);
 		this.article = getArticle(sourceDocument);
@@ -273,7 +274,7 @@ public class IndexedPage {
 					removeReference(anchor);
 					return;
 				}
-				relativeLink = pageRecord.getDynamicFilename();
+				relativeLink = pageRecord.getAbsoluteUrl();
 				page = pageRecord.getIndexedPage();
 			}
 
@@ -371,6 +372,10 @@ public class IndexedPage {
 
 	public void replaceId(@NonNull UUID newId) {
 		id = newId;
+	}
+
+	public String getHtmlDeclaration() {
+		return htmlDeclaration;
 	}
 
 	public record Note(@NonNull Element node, @NonNull Integer number) {

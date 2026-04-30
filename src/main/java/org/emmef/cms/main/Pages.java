@@ -3,6 +3,7 @@ package org.emmef.cms.main;
 import com.google.common.collect.ImmutableList;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.emmef.cms.page.IndexedPage;
 import org.emmef.cms.page.PageException;
 import org.emmef.cms.page.PageRecord;
 import org.emmef.cms.page.PageReferrals;
@@ -14,7 +15,6 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
@@ -27,13 +27,12 @@ public class Pages {
 
 	public static Pages readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
 		Map<UUID, PageRecord> collectedPages = new HashMap<>();
-		Map<UUID, PageRecord> duplicatePages = new HashMap<>();
 		List<Path> toCopy = new ArrayList<>();
-		collectPages(source, source, collectedPages, duplicatePages, toCopy, 3, uuidRelativeLinks);
-
+		collectPages(source, source, collectedPages, toCopy, 3, uuidRelativeLinks);
+		Optional<PageRecord> rootPage = collectedPages.values().stream().filter(p -> p.isRoot()).findFirst();
+		String siteName = rootPage.isPresent() ? rootPage.get().getTitle() : "Home";
 		List<PageRecord> orderedPages = createOrderedPages(collectedPages.values());
 		replacePageReferences(collectedPages, collectedPages);
-		replacePageReferences(duplicatePages, collectedPages);
 
 		replaceLastArticlesReferences(collectedPages.values(), orderedPages);
 
@@ -43,10 +42,7 @@ public class Pages {
 		cache.put(PageRecord.PAGE_COPYRIGHT, copyRight);
 
 		collectedPages.values().forEach((page) -> {
-			generatePageOutput(target, page, collectedNames, cache);
-		});
-		duplicatePages.values().forEach((page) -> {
-			generatePageOutput(target, page, collectedNames, cache);
+			generatePageOutput(target, page, collectedNames, cache, siteName);
 		});
 
 		toCopy.forEach(file -> {
@@ -67,19 +63,33 @@ public class Pages {
 		return null;
 	}
 
-	private static void generatePageOutput(@NonNull Path target, @NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache) {
-		Path dynamicPath = target.resolve(page.getDynamicFilename());
+	private static void generatePageOutput(@NonNull Path target, @NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache, String siteName) {
+		Path dynamicPath = target.resolve(page.getRelativeOutputPath());
 		if (!collectedNames.contains(dynamicPath)) {
+			ensureDirectory(dynamicPath);
 			try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
 				log.info("Wrote " + page + " to file " + dynamicPath);
 
-				page.writePage(output, cache);
+				page.writePage(output, cache, siteName);
 				collectedNames.add(dynamicPath);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		} else {
 			log.error("NOT writing page \"{}\" [{}] with already existing title", page.getTitle(), page.getId());
+		}
+	}
+
+	private static void ensureDirectory(Path dynamicPath) {
+		File directory = dynamicPath.getParent().toFile();
+		if (directory.exists()) {
+			if (!directory.isDirectory()) {
+				throw new IllegalStateException("Directory " + dynamicPath + " exists but is not a directory");
+			}
+			return;
+		}
+		if (!directory.mkdirs()) {
+			throw new IllegalStateException("Unable to create directory " + dynamicPath);
 		}
 	}
 
@@ -150,32 +160,19 @@ public class Pages {
 		return sortedResult;
 	}
 
-	private static void collectPages(Path rootPath, @NonNull Path source, Map<UUID, PageRecord> collectedPages, Map<UUID, PageRecord> duplicatePages, List<Path> toCopy, int levels, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
+	private static void collectPages(Path rootPath, @NonNull Path source, Map<UUID, PageRecord> collectedPages, List<Path> toCopy, int levels, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
 		SortedSet<Path> files = collectPageFiles(source, uuidRelativeLinks, toCopy, levels);
-		boolean hadIndex = false;
-		Path directory = null;
 		for (Path file : files) {
-			Path myDirectory = file.getParent();
-			if (!myDirectory.equals(directory)) {
-				hadIndex = false;
-			}
 			try {
-				PageRecord pageRecord = readFile(rootPath, file, uuidRelativeLinks);
-
-				UUID id = pageRecord.getId();
+				IndexedPage page = readFile(file, uuidRelativeLinks);
+				UUID id = page.getId();
 				if (collectedPages.containsKey(id)) {
 					PageRecord duplicated = collectedPages.get(id);
 					log.warn("Duplicate id {} for \n  1. \"{}\" ({})\n  2.\"{}\"' ({}) duplicates INDEX page \"{}\" ({})",
-							id, duplicated.getTitle(), duplicated.getPath(), pageRecord.getTitle(), file);
-					pageRecord.replaceId(createUniqueNameBasedId(collectedPages, pageRecord));
+							id, duplicated.getTitle(), duplicated.getRelativeOutputPath(), page.getTitle(), file);
+					page.replaceId(createUniqueNameBasedId(collectedPages, page));
 				}
-				if (pageRecord.isIndex()) {
-					if (hadIndex) {
-						pageRecord.resetIndex();
-					}
-					hadIndex = true;
-				}
-				collectedPages.put(pageRecord.getId(), pageRecord);
+				collectedPages.put(page.getId(), new PageRecord(page, file, rootPath));
 			} catch (PageException e) {
 				log.error("Not a valid source file: " + file, e);
 			} catch (Exception e) {
@@ -184,7 +181,7 @@ public class Pages {
 		}
 	}
 
-	private static @NonNull UUID createUniqueNameBasedId(Map<UUID, PageRecord> collectedPages, PageRecord pageRecord) {
+	private static @NonNull UUID createUniqueNameBasedId(Map<UUID, PageRecord> collectedPages, IndexedPage pageRecord) {
 		UUID newId;
 		AtomicInteger index = new AtomicInteger();
 		do {
@@ -204,16 +201,15 @@ public class Pages {
 		pages.forEach((page) -> page.replaceLastArticlesReference(sortedPages));
 	}
 
-	private static PageRecord readFile(Path rootPath, Path path, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
+	private static IndexedPage readFile(Path path, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
+		boolean isIndex = "index.html".equals(path.getFileName().toString());
+
+
 		try (InputStream fileStream = new FileInputStream(path.toFile())) {
-			return getPageRecordFromStream(rootPath, fileStream, path, uuidRelativeLinks);
+			Document document = Jsoup.parse(fileStream, "UTF-8", "");
+
+			return new IndexedPage(document, uuidRelativeLinks, isIndex);
 		}
-	}
-
-	private static PageRecord getPageRecordFromStream(Path rootPath, InputStream fileStream, Path path, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
-		Document document = Jsoup.parse(fileStream, "UTF-8", "");
-
-		return new PageRecord(document, path, rootPath, uuidRelativeLinks);
 	}
 
 	private record Directory(@NonNull Path directory, int level) {}
