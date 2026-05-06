@@ -11,4 +11,5 @@ public interface PathInfo {
 	boolean isRoot();
 	public List<String> getMainTag();
 	public Path getRootPath();
+	public boolean isSame(String href);
 }

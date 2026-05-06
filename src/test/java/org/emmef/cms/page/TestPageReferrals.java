@@ -4,12 +4,11 @@ import lombok.NonNull;
 import org.junit.Test;
 import org.junit.Assert;
 
-import java.util.Optional;
 import java.util.UUID;
 
 public class TestPageReferrals {
 	public static final String PREFIX = "/uuid/";
-	private static final PageReferrals PAGE_REF = new PageReferrals(PREFIX);
+	private static final PageReferrals PAGE_REF = new PageReferrals();
 
 	public static final UUID UUID_1 = UUID.randomUUID();
 	public static final String LOCAL_ID = "significant";
@@ -30,7 +29,7 @@ public class TestPageReferrals {
 	public void testIdOnly() {
 		PageLink result = PAGE_REF.of(HREF_UUID_ONLY);
 		Assert.assertNotNull(result);
-		Assert.assertEquals(UUID_1, result.getUuid());
+		Assert.assertEquals(UUID_1, result.getPage());
 		Assert.assertNull(result.getLocalId());
 		Assert.assertEquals(PAGE_REF.getReferral(result), HREF_UUID_ONLY);
 	}
@@ -39,7 +38,7 @@ public class TestPageReferrals {
 	public void testIdOnlyEmptyLocal() {
 		PageLink result = PAGE_REF.of(HREF_UUID_ONLY + '#');
 		Assert.assertNotNull(result);
-		Assert.assertEquals(UUID_1, result.getUuid());
+		Assert.assertEquals(UUID_1, result.getPage());
 		Assert.assertNull(result.getLocalId());
 		Assert.assertEquals(PAGE_REF.getReferral(result), HREF_UUID_ONLY);
 	}
@@ -48,7 +47,7 @@ public class TestPageReferrals {
 	public void testIdAndLocalId() {
 		PageLink result = PAGE_REF.of(HREF_UUID_AND_LOCAL);
 		Assert.assertNotNull(result);
-		Assert.assertEquals(UUID_1, result.getUuid());
+		Assert.assertEquals(UUID_1, result.getPage());
 		Assert.assertEquals(LOCAL_ID, result.getLocalId());
 		Assert.assertNotNull(result.getLocalId());
 		Assert.assertEquals(PAGE_REF.getReferral(result), HREF_UUID_AND_LOCAL);

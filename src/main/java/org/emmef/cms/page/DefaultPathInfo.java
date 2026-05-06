@@ -46,9 +46,25 @@ public class DefaultPathInfo implements PathInfo {
 		this.mainTag = tagBuilder.build();
 	}
 
-
-
 	public final int getLevel() {
 		return mainTag.size();
+	}
+
+	@Override
+	public boolean isSame(String sourceHref) {
+		if (sourceHref == null) {
+			return false;
+		}
+		return rootPath.resolve(sourceHref).equals(path);
+	}
+
+	public String pathIfSame(String sourceHref) {
+		if (sourceHref == null) {
+			return null;
+		}
+		if (isSame(sourceHref)) {
+			return path.toString();
+		}
+		return null;
 	}
 }
