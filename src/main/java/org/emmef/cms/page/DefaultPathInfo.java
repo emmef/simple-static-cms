@@ -52,19 +52,10 @@ public class DefaultPathInfo implements PathInfo {
 
 	@Override
 	public boolean isSame(String sourceHref) {
-		if (sourceHref == null) {
+		if (sourceHref == null || sourceHref.isBlank() || sourceHref.length() == 1) {
 			return false;
 		}
-		return rootPath.resolve(sourceHref).equals(path);
-	}
-
-	public String pathIfSame(String sourceHref) {
-		if (sourceHref == null) {
-			return null;
-		}
-		if (isSame(sourceHref)) {
-			return path.toString();
-		}
-		return null;
+		String refPath = sourceHref.startsWith("/") ? sourceHref.substring(1) : sourceHref;
+		return rootPath.resolve(refPath).equals(path);
 	}
 }

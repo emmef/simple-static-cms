@@ -38,6 +38,7 @@ public class Pages {
 
 		replaceLastArticlesReferences(pageRecords, pageRecords);
 		appendReferences(pageRecords);
+		replacePageReferences(collectedPages);
 
 		Set<Path> collectedNames = new TreeSet<Path>();
 		Map<String, Object> cache = new HashMap<>();
