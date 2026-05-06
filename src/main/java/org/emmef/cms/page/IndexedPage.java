@@ -384,7 +384,7 @@ public class IndexedPage implements PathInfo {
 			return pageLink;
 		}
 		if (href.charAt(0) == DocumentUtils.LOCAL_LINK) {
-			return PageLink.of(getPath().toString(), href.substring(1));
+			return PageLink.of(getRelativePath().toString(), href.substring(1));
 		}
 		return null;
 	}
