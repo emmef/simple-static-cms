@@ -61,7 +61,7 @@ public class Main {
 			Files.createDirectory(target, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
 		}
 
-		PageReferrals uuidRelativeLinks = new PageReferrals(obtainUuidRelativeLinks(results.getValue(UUID_RELATIVE_LINKS)));
+		PageReferrals uuidRelativeLinks = new PageReferrals();
 
 		Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks);
 	}

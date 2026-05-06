@@ -62,25 +62,8 @@ public class PageRecord {
 		if (i != 0) {
 			return i;
 		}
-		return p1.getIndexedPage().getId().hashCode() - p2.getIndexedPage().getId().hashCode();
+		return p1.getIndexedPage().getAbsoluteUrl().compareTo(p2.getIndexedPage().getAbsoluteUrl());
 	};
-
-	public static final Comparator<PageRecord> createDateComparator(long mostRecentCreated, long mostRecentModified) {
-		return new Comparator<PageRecord>() {
-			@Override
-			public int compare(PageRecord p1, PageRecord p2) {
-				double createP1 = Math.log(Math.max(1, mostRecentCreated - p1.getIndexedPage().getTimePublished().getMillis()));
-				double createP2 = Math.log(Math.max(1, mostRecentCreated - p2.getIndexedPage().getTimePublished().getMillis()));
-				double createValue = createP1 - createP2;
-				double modP1 = Math.log(Math.max(1, mostRecentModified - p1.getIndexedPage().getTimeModified().getMillis()));
-				double modP2 = Math.log(Math.max(1, mostRecentModified - p2.getIndexedPage().getTimeModified().getMillis()));
-				double modValue = modP1 - modP2;
-
-				double value = createValue * 10 + modValue;
-				return value < 0 ? -1 : value > 0 ? 1 : p1.getIndexedPage().getId().hashCode() - p2.getIndexedPage().getId().hashCode();
-			}
-		};
-	}
 
 	public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd");
 
@@ -94,42 +77,11 @@ public class PageRecord {
 		this.header = this.document.createElement("header");
 		this.document.appendChild(indexedPage.getArticle());
 		this.footer = this.document.createElement("footer");
-}
+	}
 
 	@Override
 	public String toString() {
-		return "Page \"" + indexedPage.getTitle() + "\" [" + indexedPage.getId() + "] (" + indexedPage.getRelativePath().toString() + ")";
-	}
-
-	public void replacePageReferences(@NonNull Map<UUID, PageRecord> pages) {
-		indexedPage.replacePageReferences(pages);
-
-		appendReferences();
-	}
-
-	private static void removeReference(Element anchor) {
-		log.info("Convert anchor to span:{} ", anchor);
-		anchor.tagName("span");
-		anchor.removeAttr("href");
-	}
-
-	private PageLink getPageLink(@NonNull String href) {
-		PageLink pageLink = indexedPage.getPageReferrals().of(href);
-		if (pageLink != null) {
-			return pageLink;
-		}
-		if (href.charAt(0) == DocumentUtils.LOCAL_LINK) {
-			return PageLink.of(indexedPage.getId(), href.substring(1));
-		}
-		return null;
-	}
-
-	public boolean addChild(@NonNull PageRecord rec) {
-		return children.add(rec);
-	}
-
-	public SortedSet<PageRecord> getChildren() {
-		return Collections.unmodifiableSortedSet(children);
+		return "Page \"" + indexedPage.getTitle() + "\" (" + indexedPage.getRelativePath().toString() + ")";
 	}
 
 	public String getAbsoluteUrl() {
@@ -268,7 +220,7 @@ public class PageRecord {
 				.append(" ").append(baseClass).append("-").append(subClass).append("-").append(position);
 	}
 
-	private Element appendReferences() {
+	public Element appendReferences() {
 		if (indexedPage.getNoteById().isEmpty()) {
 			return null;
 		}
@@ -476,8 +428,8 @@ public class PageRecord {
 		}
 	}
 
-	public UUID getId() {
-		return indexedPage.getId();
+	public String getId() {
+		return indexedPage.getAbsoluteUrl();
 	}
 
 	public String getTitle() {
@@ -490,10 +442,6 @@ public class PageRecord {
 
 	public DateTime getTimeModified() {
 		return indexedPage.getTimeModified();
-	}
-
-	public void replaceId(@NonNull UUID newId) {
-		indexedPage.replaceId(newId);
 	}
 
 	public boolean isIndex() {
