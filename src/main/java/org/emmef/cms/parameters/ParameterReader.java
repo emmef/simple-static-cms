@@ -284,7 +284,7 @@ public class ParameterReader {
 				log.info("Loaded configuration from {}", configFilePath);
 				return p;
 			} catch (Exception e) {
-				log.warn("Cannot load configuration file {}", configRoot, e);
+				log.warn("Cannot load configuration file {}", configRoot, e.getMessage());
 			}
 		}
 		return null;

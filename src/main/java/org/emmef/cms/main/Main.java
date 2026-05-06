@@ -7,6 +7,7 @@ import org.emmef.cms.parameters.ExtraArgumentStrategy;
 import org.emmef.cms.parameters.Parameter;
 import org.emmef.cms.parameters.ParameterReader;
 import org.emmef.cms.parameters.ParameterResults;
+import org.emmef.cms.util.PathUtil;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -42,9 +43,13 @@ public class Main {
 		ParameterResults results = parameterReader.read(arg, SOURCE, "config.properties");
 
 		log.info("Configuration\n{}", results);
-		Path target = FileSystems.getDefault().getPath(results.getValue(TARGET));
+		Path target = PathUtil.realAndNormalized(Path.of(results.getValue(TARGET)), (t, p) -> {
+			log.error("Target path cannot be resolved \"{}\": {}", p, t);
+		});
 		String copyRight = results.getValue(COPYRIGHT);
-		Path source = Path.of(results.getValue(SOURCE));
+		Path source = PathUtil.realAndNormalized(Path.of(results.getValue(SOURCE)), (t, p) ->{
+			log.error("Source path cannot be resolved \"{}\": {}", p, t);
+		});
 		if (!Files.exists(source) || !Files.isDirectory(source)) {
 			throw new IllegalArgumentException("Source directory not exist: " + source.toString());
 		}

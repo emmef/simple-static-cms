@@ -46,9 +46,6 @@ public class PageRecord {
 	@Getter
 	private final @NonNull IndexedPage indexedPage;
 	@NonNull
-	@Getter
-	private final Path relativeOutputPath;
-	@NonNull
 	private final Document document;
 	private List<Node> summary;
 	@NonNull
@@ -57,10 +54,6 @@ public class PageRecord {
 
 	private final SortedSet<PageRecord> children = createPageSet();
 	private SortedSet<PageRecord> siblings = null;
-	@Getter
-	private final String absoluteUrl;
-	@Getter
-	private final boolean isRoot;
 
 	public static final Comparator<PageRecord> COMPARE_BY_NAME = (p1, p2) -> {
 		String title1 = p1.getIndexedPage().getTitle();
@@ -95,34 +88,17 @@ public class PageRecord {
 		return new TreeSet<PageRecord>(COMPARE_BY_NAME);
 	}
 
-	public PageRecord(IndexedPage page, Path filePath, Path rootPath) {
+	public PageRecord(IndexedPage page) {
 		this.indexedPage = page;
 		this.document = Jsoup.parse(indexedPage.getHtmlDeclaration());
 		this.header = this.document.createElement("header");
 		this.document.appendChild(indexedPage.getArticle());
 		this.footer = this.document.createElement("footer");
-
-		try {
-			String relativized = rootPath.relativize(filePath).toString();
-			String lowerCased = PATTERN_UPPER.matcher(relativized).replaceAll(result -> {
-				return "_" + result.group(0).toLowerCase();
-			});
-			this.relativeOutputPath = Path.of(lowerCased);
-		} catch (IllegalArgumentException e) {
-			throw new IllegalArgumentException(this + ": path not relative to root-path " + rootPath);
-		}
-		String relativeUri = rootPath.resolve(relativeOutputPath).toUri().toString();
-		String rootUriUri = rootPath.toUri().toString();
-		if (!relativeUri.startsWith(rootUriUri)) {
-			throw new IllegalStateException(this + ": could not generate proper relative URL, as '" + relativeUri + "' does not start with '" + rootUriUri + "'");
-		}
-		this.absoluteUrl = "/" + relativeUri.substring(rootUriUri.length());
-		this.isRoot = "/index.html".equals(this.absoluteUrl);
 }
 
 	@Override
 	public String toString() {
-		return "Page \"" + indexedPage.getTitle() + "\" [" + indexedPage.getId() + "] (" + relativeOutputPath.toString() + ")";
+		return "Page \"" + indexedPage.getTitle() + "\" [" + indexedPage.getId() + "] (" + indexedPage.getRelativePath().toString() + ")";
 	}
 
 	public void replacePageReferences(@NonNull Map<UUID, PageRecord> pages) {
@@ -157,7 +133,7 @@ public class PageRecord {
 	}
 
 	public String getAbsoluteUrl() {
-		return absoluteUrl;
+		return indexedPage.getAbsoluteUrl();
 	}
 
 	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName) throws IOException {

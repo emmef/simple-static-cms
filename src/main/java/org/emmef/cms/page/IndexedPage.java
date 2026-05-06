@@ -14,6 +14,7 @@ import org.jsoup.nodes.Node;
 import org.jsoup.parser.Tag;
 
 import java.net.URLEncoder;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -30,7 +31,7 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
  * The replacement of links will happen at the last possible moment on all pages.
  */
 @Slf4j
-public class IndexedPage {
+public class IndexedPage implements PathInfo {
 	public static final String META_UUID = "scms-uuid";
 	public static final String META_MATH = "scms-uses-math";
 	public static final String META_PUBLISH_DATE = "scms-published-date";
@@ -47,13 +48,13 @@ public class IndexedPage {
 	@Getter
 	private final PageReferrals pageReferrals;
 	@Getter
+	private final PathInfo pathInfo;
+	@Getter
 	private @NonNull UUID id;
 	@Getter
 	private final @NonNull String title;
 	@Getter
 	private final boolean math;
-	@Getter
-	private final boolean index;
 	@Getter
 	private final @NonNull Element article;
 	@Getter
@@ -72,16 +73,16 @@ public class IndexedPage {
 	private final DateTime timePublished;
 	private final String htmlDeclaration;
 
-	public IndexedPage(Document document, @NonNull PageReferrals pageReferrals, boolean isIndex) {
+	public IndexedPage(Document document, @NonNull PageReferrals pageReferrals, PathInfo pathInfo) {
 		this.pageReferrals = pageReferrals;
+		this.pathInfo = pathInfo;
 		Document sourceDocument = document.clone();
 
 		Element html = sourceDocument.getElementsByTag("html").first();
 		String language = html != null ? html.attr("lang") : null;
-		this.htmlDeclaration = STR."<!DOCTYPE html>\{language != null ? STR."<html lang=\"\{language}\"></html>" : "<html></html>"}";
+		this.htmlDeclaration = "<!DOCTYPE html>" + (language != null ? "<html lang=\"" + language + "\"</html>" : "<html></html>");
 
 		Node head = getNodeByTag(sourceDocument, "head", NodeExpectation.UNIQUE);
-		this.index = true;
 		this.id = DocumentUtils.getMetaValue(head, META_UUID, "page identifier", TO_UUID);
 		this.title = DocumentUtils.getTitle(head);
 		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, META_MATH, "tex support", Function.identity()));
@@ -102,6 +103,7 @@ public class IndexedPage {
 		this.summary = searchForSummary(article);
 		removeNotes(article);
 	}
+
 
 	private static @NonNull Element getArticle(Document sourceDocument) {
 		Element sourceBody = DocumentUtils.getNodeByTag(sourceDocument, "body", NodeExpectation.UNIQUE);
@@ -376,6 +378,41 @@ public class IndexedPage {
 
 	public String getHtmlDeclaration() {
 		return htmlDeclaration;
+	}
+
+	@Override
+	public Path getPath() {
+		return pathInfo.getPath();
+	}
+
+	@Override
+	public Path getRelativePath() {
+		return pathInfo.getRelativePath();
+	}
+
+	@Override
+	public String getAbsoluteUrl() {
+		return pathInfo.getAbsoluteUrl();
+	}
+
+	@Override
+	public boolean isIndex() {
+		return pathInfo.isIndex();
+	}
+
+	@Override
+	public boolean isRoot() {
+		return pathInfo.isRoot();
+	}
+
+	@Override
+	public List<String> getMainTag() {
+		return pathInfo.getMainTag();
+	}
+
+	@Override
+	public Path getRootPath() {
+		return pathInfo.getRootPath();
 	}
 
 	public record Note(@NonNull Element node, @NonNull Integer number) {
