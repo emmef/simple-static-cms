@@ -10,10 +10,8 @@ import org.jsoup.nodes.Node;
 import org.jsoup.select.Elements;
 
 import java.util.Optional;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 public class DocumentUtils {
@@ -21,7 +19,6 @@ public class DocumentUtils {
 	public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
 	public static final String NOTE_ELEMENT = "aside";
 	public static final String ANCHOR_ELEMENT = "a";
-	public static final Character LOCAL_LINK = '#';
 	public static final String ANCHOR_HREF = "href";
 	public static final String META_TAG = "meta";
 	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive(META_TAG);

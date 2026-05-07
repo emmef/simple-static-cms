@@ -8,54 +8,27 @@ import java.nio.file.Path;
 import java.util.List;
 
 @Getter
-public class DefaultPathInfo implements PathInfo {
+public class DefaultPathInfo extends PathInfo.DefaultPathInfo {
 	public static final String INDEX_FILE = "index.html";
+	public static final String ROOT_INDEX_FILE = PathResolver.URL_PATH_SEPARATOR + INDEX_FILE;
 
-	private final Path path;
-	private final Path relativePath;
-	private final String absoluteUrl;
 	private final boolean index;
 	private final boolean root;
 	private final List<String> mainTag;
-	private final Path rootPath;
 
-	public DefaultPathInfo(@NonNull Path root, @NonNull Path fileInRoot) {
-		this.path = fileInRoot.normalize();
-		this.rootPath = root.normalize();
-		try {
-			this.relativePath = rootPath.relativize(this.path);
-		} catch (IllegalArgumentException e) {
-			throw new IllegalArgumentException(this + ": path not relative to root-path " + rootPath);
-		}
-		String relativeUri = rootPath.resolve(relativePath).toUri().toString();
-		String rootUriUri = rootPath.toUri().toString();
-		if (!relativeUri.startsWith(rootUriUri)) {
-			throw new IllegalStateException(this + ": could not generate proper relative URL, as '" + relativeUri + "' does not start with '" + rootUriUri + "'");
-		}
-		this.absoluteUrl = "/" + relativeUri.substring(rootUriUri.length());
-		this.index = INDEX_FILE.equals(this.relativePath.getFileName().toString());
-		this.root = INDEX_FILE.equals(this.relativePath.toString());
+	public DefaultPathInfo(@NonNull PathResolver resolver, @NonNull Path fileInRoot) {
+		super(resolver, fileInRoot);
+		this.index = INDEX_FILE.equals(fileInRoot.getFileName().toString());
+		String pageId = getId().getPage();
+		this.root = ROOT_INDEX_FILE.equals(pageId);
 
 		ImmutableList.Builder<String> tagBuilder = new ImmutableList.Builder<>();
-		Path parent = relativePath.getParent();
+		Path parent = Path.of(pageId).getParent();
 		if (parent != null) {
 			parent.forEach(path -> {
 				tagBuilder.add(path.getFileName().toString());
 			});
 		}
 		this.mainTag = tagBuilder.build();
-	}
-
-	public final int getLevel() {
-		return mainTag.size();
-	}
-
-	@Override
-	public boolean isSame(String sourceHref) {
-		if (sourceHref == null || sourceHref.isBlank() || sourceHref.length() == 1) {
-			return false;
-		}
-		String refPath = sourceHref.startsWith("/") ? sourceHref.substring(1) : sourceHref;
-		return rootPath.resolve(refPath).equals(path);
 	}
 }

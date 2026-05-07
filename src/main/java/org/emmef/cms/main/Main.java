@@ -2,7 +2,7 @@ package org.emmef.cms.main;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.emmef.cms.page.PageReferrals;
+import org.emmef.cms.page.PathResolver;
 import org.emmef.cms.parameters.ExtraArgumentStrategy;
 import org.emmef.cms.parameters.Parameter;
 import org.emmef.cms.parameters.ParameterReader;
@@ -10,12 +10,9 @@ import org.emmef.cms.parameters.ParameterResults;
 import org.emmef.cms.util.PathUtil;
 
 import java.io.IOException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.util.Properties;
-import java.util.function.Function;
 
 @Slf4j
 public class Main {
@@ -61,9 +58,13 @@ public class Main {
 			Files.createDirectory(target, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
 		}
 
-		PageReferrals uuidRelativeLinks = new PageReferrals();
-
-		Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks);
+		PathResolver uuidRelativeLinks = new PathResolver(Path.of(results.getValue(SOURCE)), Path.of(results.getValue(TARGET)));
+		if (results.isSet(UUID_RELATIVE_LINKS)) {
+			Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks.withSourceSiteRoot(Path.of(results.getValue(UUID_RELATIVE_LINKS))));
+		}
+		else {
+			Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks);
+		}
 	}
 
 	private @NonNull String obtainUuidRelativeLinks(String value) {
