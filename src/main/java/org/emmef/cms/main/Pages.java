@@ -13,7 +13,6 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -25,7 +24,7 @@ public class Pages {
 	public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
 	public static final String TAG_SEPARATOR = "/";
 
-	public static Pages readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
+	public static Pages readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PathResolver uuidRelativeLinks) throws IOException {
 		List<IndexedPage> collectedPages = new ArrayList<>();
 		List<Path> toCopy = new ArrayList<>();
 		collectPages(source, collectedPages, toCopy, 3, uuidRelativeLinks);
@@ -111,7 +110,7 @@ public class Pages {
 		return ImmutableList.copyOf(result);
 	}
 
-	private static @NonNull Set<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PageReferrals uuidRelativeLinks, List<Path> toCopy, int levels) {
+	private static @NonNull Set<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PathResolver uuidRelativeLinks, List<Path> toCopy, int levels) {
 		List<Directory> subDirectories = new ArrayList<>();
 		Path realSource = PathUtil.realAndNormalized(source);
 		subDirectories.add(new Directory(realSource, 1));
@@ -173,7 +172,7 @@ public class Pages {
 		return Collections.unmodifiableSet(result);
 	}
 
-	private static void collectPages(@NonNull Path rootPath, List<IndexedPage> collectedPages, List<Path> toCopy, int levels, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
+	private static void collectPages(@NonNull Path rootPath, List<IndexedPage> collectedPages, List<Path> toCopy, int levels, @NonNull PathResolver uuidRelativeLinks) throws IOException {
 		Set<PathInfo> infos = collectPathInfos(rootPath, uuidRelativeLinks, toCopy, levels);
 		for (PathInfo info : infos) {
 			try {
@@ -198,7 +197,7 @@ public class Pages {
 		pages.forEach((page) -> page.replaceLastArticlesReference(sortedPages));
 	}
 
-	private static IndexedPage readFile(PathInfo pageInfo, @NonNull PageReferrals uuidRelativeLinks) throws IOException {
+	private static IndexedPage readFile(PathInfo pageInfo, @NonNull PathResolver uuidRelativeLinks) throws IOException {
 		try (InputStream fileStream = new FileInputStream(pageInfo.getPath().toFile())) {
 			Document document = Jsoup.parse(fileStream, "UTF-8", "");
 

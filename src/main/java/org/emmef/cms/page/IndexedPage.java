@@ -1,6 +1,6 @@
 package org.emmef.cms.page;
 
-import com.google.common.base.Charsets;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
@@ -11,9 +11,7 @@ import org.joda.time.format.ISODateTimeFormat;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
-import org.jsoup.parser.Tag;
 
-import java.net.URLEncoder;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,7 +29,7 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
  * The replacement of links will happen at the last possible moment on all pages.
  */
 @Slf4j
-public class IndexedPage implements PathInfo {
+public class IndexedPage extends DefaultPathInfo {
 	public static final String META_UUID = "scms-uuid";
 	public static final String META_MATH = "scms-uses-math";
 	public static final String META_PUBLISH_DATE = "scms-published-date";
@@ -42,7 +40,6 @@ public class IndexedPage implements PathInfo {
 	public static final String SUMMARY_ELEMENT = "p";
 	public static final String SUMMARY_ID = "article-summary";
 	public static final DateTime ZERO_DATE = new DateTime(0);
-	public static final String MAKE_LINK_FOOTNOTE = "ref:";
 	public static final Function<String, UUID> TO_UUID = uuid -> UUID.fromString(uuid);
 
 	public static final Comparator<IndexedPage> createDateComparator(long mostRecentCreated, long mostRecentModified) {
@@ -55,14 +52,12 @@ public class IndexedPage implements PathInfo {
 			double modValue = modP1 - modP2;
 
 			double value = createValue * 10 + modValue;
-			return value < 0 ? -1 : value > 0 ? 1 : p1.getAbsoluteUrl().compareTo(p2.getAbsoluteUrl());
+			return value < 0 ? -1 : value > 0 ? 1 : p1.getId().compareTo(p2.getId());
 		};
 	}
 
 	@Getter
-	private final PageReferrals pageReferrals;
-	@Getter
-	private final PathInfo pathInfo;
+	private final PathResolver pathResolver;
 	@Getter
 	private final @NonNull String title;
 	@Getter
@@ -76,7 +71,7 @@ public class IndexedPage implements PathInfo {
 	@Getter
 	private final @NonNull Map<String, Note> noteById;
 	@Getter
-	private final @NonNull Set<PageLink> pageLinks;
+	private final @NonNull Set<PathResolver.PageLink> pageLinks;
 	@Getter
 	private final @NonNull Map<String, String> captionById;
 	@Getter
@@ -85,9 +80,9 @@ public class IndexedPage implements PathInfo {
 	private final DateTime timePublished;
 	private final String htmlDeclaration;
 
-	public IndexedPage(Document document, @NonNull PageReferrals pageReferrals, PathInfo pathInfo) {
-		this.pageReferrals = pageReferrals;
-		this.pathInfo = pathInfo;
+	public IndexedPage(Document document, @NonNull PathResolver pathResolver, Path file) {
+		super(pathResolver, file);
+		this.pathResolver = pathResolver;
 		Document sourceDocument = document.clone();
 
 		Element html = sourceDocument.getElementsByTag("html").first();
@@ -106,15 +101,16 @@ public class IndexedPage implements PathInfo {
 		this.captionById = Collections.unmodifiableMap(captions);
 
 		List<Element> notes = new ArrayList<>();
-		Set<PageLink> pages = new HashSet<>();
-		scanReferences(pages, sourceDocument, notes);
+		// TODO scanReferences DOES NOT scan for external link footnote items
+		// TODO
+
+		this.noteById = new FootNoteScanner(sourceDocument, article).getReferencedNotes();
+		this.pageLinks = scanForGlobalLinks(sourceDocument, noteById.values());
 		if (log.isInfoEnabled()) {
 			log.info("{}:", getTitle());
 			log.info("- Note identifiers: {}", notes.stream().map(Element::id).collect(Collectors.joining(", ")));
-			log.info("- Pages linked:     {}", pages.stream().map(PageLink::toString).collect(Collectors.joining(", ")));
+			log.info("- Pages linked:     {}", pageLinks.stream().map(p -> p.toString()).collect(Collectors.joining(", ")));
 		}
-		this.pageLinks = Collections.unmodifiableSet(pages);
-		this.noteById = createNotesById(notes);
 		this.latestArticles = searchForLatestArticles(article);
 		this.summary = searchForSummary(article);
 		removeNotes(article);
@@ -140,22 +136,6 @@ public class IndexedPage implements PathInfo {
 					captionById.put(node.attr("id"), node.text());
 				});
 		return captionById;
-	}
-
-	private static @NonNull Map<String, Element> createNotesById(Element sourceDocument) {
-		Map<String, Element> notes = new HashMap<>();
-		sourceDocument.getAllElements().forEach(node -> {
-			if (!NOTE_ELEMENT.equalsIgnoreCase(node.nodeName())) {
-				return;
-			}
-			String id = node.attr("id");
-			if (node == null) {
-				return;
-			}
-			notes.put(node.attr("id"), node.clone());
-			node.remove();
-		});
-		return notes;
 	}
 
 	private void removeNotes(Element sourceDocument) {
@@ -186,68 +166,13 @@ public class IndexedPage implements PathInfo {
 		return latestArticle;
 	}
 
-	private void scanReferences(Set<PageLink> pages, @NonNull Element sourceDocument, List<Element> notes) {
-		@NonNull Map<String, Element> notesFirstScan = createNotesById(sourceDocument);
-		Set<String> referred = new HashSet<>();
-		handleReferences(article, pages, notesFirstScan, notes, referred);
-		int noteCount;
-		do {
-			noteCount = notes.size();
-			new ArrayList<>(notes).forEach(note -> {
-				handleReferences(note, pages, notesFirstScan, notes, referred);
-			});
-		} while (noteCount != notes.size());
-	}
-
-	private void handleReferences(Element element, Set<PageLink> pages, @NonNull Map<String, Element> notesFirstScan, List<Element> notes, Set<String> referred) {
-		element.getElementsByTag(ANCHOR_ELEMENT).forEach(node -> {
-			String href = node.attr(ANCHOR_HREF).trim();
-			if (href == null || href.isBlank()) {
-				return;
-			}
-			PageLink pageLink = pageReferrals.of(href);
-			if (pageLink != null)
-				pages.add(pageLink);
-			else {
-				if (href.startsWith(MAKE_LINK_FOOTNOTE)) {
-					if (notesFirstScan.containsKey(href)) {
-						node.attr("href", DocumentUtils.LOCAL_LINK + notesFirstScan.get(href).id());
-						node.text("");
-					}
-					else {
-						String url = href.substring(MAKE_LINK_FOOTNOTE.length());
-						String id = URLEncoder.encode( "footnotes::" + notes.size(), Charsets.UTF_8);
-						Element note = new Element(Tag.valueOf("aside"), "top");
-						Element clone = node.clone();
-						clone.attr("href", url);
-						note.appendChild(clone);
-						note.attr("id", id);
-						node.attr(ANCHOR_HREF, DocumentUtils.LOCAL_LINK + id);
-						node.text("");
-						notes.add(note);
-						referred.add(id);
-						notesFirstScan.put(href, note);
-						notesFirstScan.put(id, note);
-					}
-				}
-				else {
-					String id = href.substring(1);
-					Element note = notesFirstScan.get(id);
-					if (note != null && !referred.contains(id)) {
-						notes.add(note);
-						referred.add(id);
-					}
-				}
-			}
-		});
-	}
-
 	private static @NonNull Map<String, Note> createNotesById(List<Element> notes) {
 		Map<String, Note> results = new HashMap<>();
 		for (int i = 0; i < notes.size(); i++) {
 			Element element = notes.get(i);
 			String id = element.attr("id");
 			results.put(id, new Note(element, i + 1));
+			element.remove();
 		}
 		return results;
 	}
@@ -268,30 +193,30 @@ public class IndexedPage implements PathInfo {
 	}
 
 	public void replacePageReferences(@NonNull List<IndexedPage> pages) {
-		AtomicInteger refCounter  = new AtomicInteger(0);
+		AtomicInteger refCounter = new AtomicInteger(0);
 		visitAnchors(anchor -> {
-			String href = anchor.attr("href");
+			String href = anchor.attr("href").trim();
 			if (href.isBlank()) {
 				removeReference(anchor);
 				return;
 			}
-			PageLink pageLink = getPageLink(href);
+			PathResolver.PageLink pageLink = getPageLink(href);
 			if (pageLink == null) {
 				return;
 			}
 			final IndexedPage foundPage = findPage(pages, pageLink);
+
 			// TODO This must be replaced with a href comparison from perspective of the source file system and the page id.
 			boolean isThisPage = foundPage == this;
 			String relativeLink;
 			if (isThisPage) {
 				relativeLink = null;
-			}
-			else {
+			} else {
 				if (foundPage == null) {
 					removeReference(anchor);
 					return;
 				}
-				relativeLink = foundPage.getAbsoluteUrl();
+				relativeLink = pathResolver.toTargetHref(foundPage.getId());
 			}
 
 			String localId = pageLink.getLocalId();
@@ -299,12 +224,10 @@ public class IndexedPage implements PathInfo {
 				if (isThisPage) {
 					removeReference(anchor);
 					return;
-				}
-				else if (foundPage == null) {
+				} else if (foundPage == null) {
 					removeReference(anchor);
 					return;
-				}
-				else {
+				} else {
 					anchor.attr("href", relativeLink);
 					if (anchor.text().isBlank()) {
 						anchor.text(foundPage.getTitle());
@@ -313,7 +236,7 @@ public class IndexedPage implements PathInfo {
 				return;
 			}
 
-			String newRef = (relativeLink != null ? relativeLink : "") + DocumentUtils.LOCAL_LINK + localId;
+			String newRef = (relativeLink != null ? relativeLink : "") + PathResolver.LOCAL_LINK + localId;
 
 			IndexedPage.Note note = foundPage.getNoteById().get(localId);
 			if (note != null) {
@@ -321,8 +244,7 @@ public class IndexedPage implements PathInfo {
 					anchor.addClass("reference-ptr");
 					if (isThisPage) {
 						anchor.text(Integer.toString(note.number()));
-					}
-					else {
+					} else {
 						anchor.text("*" + note.number());
 						anchor.attr("href", newRef);
 					}
@@ -340,20 +262,18 @@ public class IndexedPage implements PathInfo {
 			}
 			if (anchor.text().isBlank() || "=".equals(anchor.text())) {
 				createCaption(anchor, foundPage, localId, false);
-			}
-			else if ("_".equals(anchor.text())) {
+			} else if ("_".equals(anchor.text())) {
 				createCaption(anchor, foundPage, localId, true);
 			}
 		});
 	}
 
-	private IndexedPage findPage(@NonNull List<IndexedPage> pages, PageLink pageLink) {
-		String myId = pageLink.getPage();
-		if (this.isSame(myId)) {
+	private IndexedPage findPage(@NonNull List<IndexedPage> pages, PathResolver.PageLink pageLink) {
+		if (getId().isSamePage(pageLink)) {
 			return this;
 		}
 		for (IndexedPage page : pages) {
-			if (page.isSame(myId)) {
+			if (page.getId().isSamePage(pageLink)) {
 				return page;
 			}
 		}
@@ -364,33 +284,32 @@ public class IndexedPage implements PathInfo {
 		String caption = pageRecord.getCaptionById().get(localId);
 		if (caption == null || caption.isBlank()) {
 			anchor.text("???");
-		}
-		else if (lowerCase) {
+		} else if (lowerCase) {
 			anchor.text(caption.toLowerCase());
-		}
-		else {
+		} else {
 			anchor.text(caption);
 		}
 	}
 
 	private static void removeReference(Element anchor) {
+		if (anchor.text().trim().isBlank()) {
+			anchor.remove();
+			return;
+		}
 		anchor.tagName("span");
 		anchor.removeAttr("href");
 	}
 
-	private PageLink getPageLink(@NonNull String href) {
-		PageLink pageLink = getPageReferrals().of(href);
-		if (pageLink != null) {
-			return pageLink;
-		}
-		if (href.charAt(0) == DocumentUtils.LOCAL_LINK) {
-			return PageLink.of(getRelativePath().toString(), href.substring(1));
-		}
-		return null;
+	private PathResolver.PageLink getPageLink(@NonNull String href) {
+		return getPathResolver().fromSourceHref(href);
 	}
 
 	private void visitAnchors(@NonNull Consumer<Element> onAnchor) {
-		article.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor);
+		visitAnchors(article, onAnchor);
+	}
+
+	private void visitAnchors(@NonNull Element root, @NonNull Consumer<Element> onAnchor) {
+		root.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor);
 		noteById.values().forEach(v -> v.node.getElementsByTag(ANCHOR_ELEMENT).forEach(onAnchor));
 	}
 
@@ -403,46 +322,85 @@ public class IndexedPage implements PathInfo {
 		return htmlDeclaration;
 	}
 
-	@Override
-	public Path getPath() {
-		return pathInfo.getPath();
+	private @NonNull Set<PathResolver.PageLink> scanForGlobalLinks(Document sourceDocument, Collection<Note> values) {
+		Set<PathResolver.PageLink> links = new HashSet<>();
+		visitAnchors(sourceDocument, anchor -> {
+			PathResolver.PageLink link = pathResolver.fromSourceHref(anchor.attr("href").trim());
+			if (link == null) {
+				return;
+			}
+			PathResolver.PageLink localized = localize(link);
+			if (!localized.isLocal()) {
+				links.add(localized);
+			}
+		});
+		return Collections.unmodifiableSet(links);
 	}
 
-	@Override
-	public Path getRelativePath() {
-		return pathInfo.getRelativePath();
+	private class FootNoteScanner {
+		private final LinkedHashMap<String, Element> referencedNotes = new LinkedHashMap<>();
+		private final Map<String, Element> notesFirstScan;
+		private int noteCount = 0;
+		private Map<String, Note> notesById;
+
+		FootNoteScanner(@NonNull Element sourceDocument, @NonNull Element article) {
+			notesFirstScan = createNotesById(sourceDocument);
+			handleFootNotes(article);
+			do {
+				noteCount = referencedNotes.size();
+				new ArrayList<>(referencedNotes.values()).forEach(note -> {
+					handleFootNotes(note);
+				});
+			} while (noteCount != referencedNotes.size());
+
+		}
+
+		public Map<String, Note> getReferencedNotes() {
+			if (notesById == null) {
+				ImmutableMap.Builder<String, Note> builder = ImmutableMap.builder();
+				AtomicInteger counter = new AtomicInteger();
+				referencedNotes.forEach((id, note) -> {
+					builder.put(id, new Note(note, counter.incrementAndGet()));
+				});
+				notesById = builder.build();
+			}
+			return notesById;
+		}
+
+
+		private static @NonNull Map<String, Element> createNotesById(Element sourceDocument) {
+			Map<String, Element> notes = new HashMap<>();
+			sourceDocument.getAllElements().forEach(node -> {
+				if (!NOTE_ELEMENT.equalsIgnoreCase(node.nodeName())) {
+					return;
+				}
+				String id = node.attr("id");
+				if (id.isBlank()) {
+					return;
+				}
+				notes.put(id, node);
+				node.remove();
+			});
+			return notes;
+		}
+
+		private void handleFootNotes(Element element) {
+			element.getElementsByTag(ANCHOR_ELEMENT).forEach(node -> {
+				PathResolver.PageLink pageLink = fromSourceHref(node.attr(ANCHOR_HREF).trim());
+				if (pageLink == null) {
+					return;
+				}
+				PathResolver.PageLink localized = localize(pageLink);
+				if (!localized.isLocal()) {
+					return;
+				}
+
+				String id = localized.getLocalId();
+				referencedNotes.putIfAbsent(id, node);
+			});
+		}
+
 	}
 
-	@Override
-	public String getAbsoluteUrl() {
-		return pathInfo.getAbsoluteUrl();
-	}
-
-	@Override
-	public boolean isIndex() {
-		return pathInfo.isIndex();
-	}
-
-	@Override
-	public boolean isRoot() {
-		return pathInfo.isRoot();
-	}
-
-	@Override
-	public List<String> getMainTag() {
-		return pathInfo.getMainTag();
-	}
-
-	@Override
-	public Path getRootPath() {
-		return pathInfo.getRootPath();
-	}
-
-	@Override
-	public boolean isSame(String href) {
-		return pathInfo.isSame(href);
-	}
-
-	public record Note(@NonNull Element node, @NonNull Integer number) {
-	}
+	public record Note(@NonNull Element node, @NonNull Integer number) {}
 }
