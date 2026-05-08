@@ -84,7 +84,9 @@ public class IndexedPage extends DefaultPathInfo {
 		this.summaryInListing = summary.clone();
 		this.document = htmlDeclarationFromElement(sourceHtml);
 		this.captionById = PageUtils.createCaptionById(article);
-		this.noteById = new FootNoteScanner(pathResolver, getId()).scanForNotes(sourceHtml, article);
+		FootNoteScanner footNoteScanner = new FootNoteScanner(pathResolver, getId());
+		this.noteById = footNoteScanner.scanForNotes(sourceHtml, article);
+		footNoteScanner.removeManagedNotes(article);
 		this.latestArticles = searchForLatestArticles(article);
 	}
 
@@ -142,7 +144,8 @@ public class IndexedPage extends DefaultPathInfo {
 				Element element = captionById.get(pageLink.getLocalId());
 				if (anchor.text().isBlank()) {
 					anchor.children().remove();
-					element.children().forEach(child -> anchor.children().add(child.clone()));
+					anchor.text(element.text());
+//					element.children().forEach(child -> anchor.children().add(child.clone()));
 				}
 			}));
 		}
