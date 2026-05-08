@@ -21,13 +21,13 @@ class FootNoteScanner {
 		var allNotes = findAllNotesById(sourceDocument);
 		var referenced = new LinkedHashMap<String, Element>();
 
-		LinkedHashMap<String, Element> added = handleFootNotes(article, referenced);
+		LinkedHashMap<String, Element> added = handleFootNotes(article, referenced, allNotes);
 		while (!added.isEmpty()) {
 			referenced.putAll(added);
 			var copy = new HashMap<>(added);
 			added.clear();
 			copy.values().forEach(note -> {
-				added.putAll(handleFootNotes(note, referenced));
+				added.putAll(handleFootNotes(note, referenced, allNotes));
 			});
 		}
 		ImmutableMap.Builder<String, Note> builder = ImmutableMap.builder();
@@ -38,6 +38,16 @@ class FootNoteScanner {
 		return builder.build();
 	}
 
+	public void removeManagedNotes(@NonNull Element root) {
+		root.getElementsByTag(NOTE_ELEMENT).forEach(note -> {
+			String id = note.attr("id");
+			if (id.isBlank()) {
+				return;
+			}
+			note.remove();
+		});
+	}
+
 	private static @NonNull Map<String, Element> findAllNotesById(Element sourceDocument) {
 		var notes = new HashMap<String, Element>();
 		sourceDocument.getElementsByTag(NOTE_ELEMENT).forEach(note -> {
@@ -46,12 +56,11 @@ class FootNoteScanner {
 				return;
 			}
 			notes.put(id, note);
-			note.remove();
 		});
 		return notes;
 	}
 
-	private LinkedHashMap<String, Element> handleFootNotes(Element element, Map<String, Element> referenced) {
+	private LinkedHashMap<String, Element> handleFootNotes(Element element, Map<String, Element> referenced, Map<String, Element> allNotes) {
 		var result = new LinkedHashMap<String, Element>();
 		PageUtils.scanForManagedAnchors(pathResolver, element, (anchor, link) -> {
 			PathResolver.PageLink localized = page.localize(link);
@@ -60,8 +69,9 @@ class FootNoteScanner {
 			}
 
 			String id = localized.getLocalId();
-			if (!referenced.containsKey(id)) {
-				result.putIfAbsent(id, anchor);
+			Element note = allNotes.get(id);
+			if (note != null && !referenced.containsKey(id)) {
+				result.putIfAbsent(id, note);
 			}
 		});
 		return result;

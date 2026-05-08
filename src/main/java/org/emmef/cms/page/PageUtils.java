@@ -33,9 +33,9 @@ public class PageUtils {
 		if (sourceBody == null) {
 			throw new PageException("Page has no article (in <body>)!");
 		}
-		sourceBody.remove();
-		sourceBody.tagName("article");
-		return sourceBody;
+		Element clone = sourceBody.clone();
+		clone.tagName("article");
+		return clone;
 	}
 
 	public static @NonNull Map<String, Element> createCaptionById(@NonNull Element body) {
