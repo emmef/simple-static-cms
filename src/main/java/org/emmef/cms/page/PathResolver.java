@@ -195,11 +195,12 @@ public class PathResolver {
 		private final String page;
 		@Getter
 		private final String localId;
-		private final String normalized;
+		@Getter
+		private final String link;
 
 		@Override
 		public String toString() {
-			return PageLink.class.getSimpleName() + "{" + normalized + "}";
+			return PageLink.class.getSimpleName() + "{" + link + "}";
 		}
 
 		public boolean isLocal() {
@@ -248,7 +249,7 @@ public class PathResolver {
 
 		@Override
 		public int compareTo(PageLink o) {
-			return o == null ? 1 : normalized.compareTo(o.normalized);
+			return o == null ? 1 : link.compareTo(o.link);
 		}
 
 		private static PageLink of(String pageId, String localId) {
@@ -266,14 +267,14 @@ public class PathResolver {
 			this.localId = localId != null ? localId.trim() : null;
 			if (this.page == null) {
 				if (this.localId == null) {
-					this.normalized = "NONE";
+					this.link = "NONE";
 				} else {
-					this.normalized = LOCAL_LINK + localId;
+					this.link = LOCAL_LINK + localId;
 				}
 			} else if (this.localId == null) {
-				this.normalized = page;
+				this.link = page;
 			} else {
-				this.normalized = page + LOCAL_LINK + localId;
+				this.link = page + LOCAL_LINK + localId;
 			}
 		}
 	}

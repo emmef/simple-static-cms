@@ -12,7 +12,6 @@ import org.jsoup.select.NodeVisitor;
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -56,13 +55,11 @@ public class PageRecord {
 	private SortedSet<PageRecord> siblings = null;
 
 	public static final Comparator<PageRecord> COMPARE_BY_NAME = (p1, p2) -> {
-		String title1 = p1.getIndexedPage().getTitle();
-		String title2 = p2.getIndexedPage().getTitle();
-		int i = title1.compareToIgnoreCase(title2);
+		int i = p1.getIndexedPage().getTitle().compareToIgnoreCase(p2.getIndexedPage().getTitle());
 		if (i != 0) {
 			return i;
 		}
-		return p1.getIndexedPage().getAbsoluteUrl().compareTo(p2.getIndexedPage().getAbsoluteUrl());
+		return p1.getIndexedPage().getId().compareTo(p2.getIndexedPage().getId());
 	};
 
 	public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd");
@@ -73,7 +70,7 @@ public class PageRecord {
 
 	public PageRecord(IndexedPage page) {
 		this.indexedPage = page;
-		this.document = Jsoup.parse(indexedPage.getHtmlDeclaration());
+		this.document = indexedPage.getDocument();
 		this.header = this.document.createElement("header");
 		this.document.appendChild(indexedPage.getArticle());
 		this.footer = this.document.createElement("footer");
@@ -81,11 +78,11 @@ public class PageRecord {
 
 	@Override
 	public String toString() {
-		return "Page \"" + indexedPage.getTitle() + "\" (" + indexedPage.getRelativePath().toString() + ")";
+		return "Page \"" + indexedPage.getTitle() + "\" (" + indexedPage.getId() + ")";
 	}
 
 	public String getAbsoluteUrl() {
-		return indexedPage.getAbsoluteUrl();
+		return indexedPage.getResolver().toTargetHref(indexedPage.getId());
 	}
 
 	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName) throws IOException {
@@ -230,9 +227,9 @@ public class PageRecord {
 				.attr("class", "reference reference-list")
 				.attr("id", REFERENCE_LIST);
 
-		SortedSet<IndexedPage.Note> notes = new TreeSet<>(Comparator.comparingInt(IndexedPage.Note::number));
+		SortedSet<FootNoteScanner.Note> notes = new TreeSet<>(Comparator.comparingInt(FootNoteScanner.Note::number));
 		notes.addAll(indexedPage.getNoteById().values());
-		for (IndexedPage.Note note : notes) {
+		for (FootNoteScanner.Note note : notes) {
 			Element node = note.node();
 			Element reference = referenceList.appendElement("tr")
 					.attr("class", "reference reference-item");
@@ -429,7 +426,7 @@ public class PageRecord {
 	}
 
 	public String getId() {
-		return indexedPage.getAbsoluteUrl();
+		return indexedPage.getId().toString();
 	}
 
 	public String getTitle() {

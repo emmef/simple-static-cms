@@ -11,6 +11,7 @@ import java.util.List;
 public interface PathInfo {
 	@NonNull PathResolver getResolver();
 	@NonNull PageLink getId();
+	@NonNull Path getSourcePath();
 	default @NonNull Path getTargetPath() {
 		return getResolver().toTargetPath(getId());
 	}
@@ -34,10 +35,12 @@ public interface PathInfo {
 	class DefaultPathInfo implements PathInfo {
 		private final PageLink id;
 		private final PathResolver resolver;
+		private final Path sourcePath;
 
 		public DefaultPathInfo(@NonNull PathResolver resolver, @NonNull Path file) {
 			this.id = resolver.fromSourceFile(file);
 			this.resolver = resolver;
+			this.sourcePath = file;
 		}
 
 	}

@@ -4,6 +4,7 @@ import lombok.NonNull;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
 import org.emmef.cms.util.NodeHelper;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
@@ -23,7 +24,7 @@ public class DocumentUtils {
 	public static final String META_TAG = "meta";
 	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive(META_TAG);
 
-	public static Element getNodeByTag(Document document, String tagName, NodeExpectation expectation) {
+	public static Element getNodeByTag(Element document, String tagName, NodeExpectation expectation) {
 
 		Elements elementsByTagName = document.getElementsByTag(tagName);
 		Element item;
@@ -106,4 +107,16 @@ public class DocumentUtils {
 		return node.isPresent() ? node.get().attr("value") : null;
 	}
 
+	public static @NonNull Element getHtmlElement(@NonNull Document document) {
+		Element html = document.getElementsByTag("html").first();
+		if (html == null) {
+			throw new IllegalStateException("No html element!");
+		}
+		return html.clone();
+	}
+
+	public static @NonNull Document htmlDeclarationFromElement(@NonNull Element html) {
+		String language = html.attr("lang");
+		return Jsoup.parse("<!DOCTYPE html>" + (language.isBlank() ? "<html></html>" : "<html lang=\"" + language + "\"</html>"));
+	}
 }
