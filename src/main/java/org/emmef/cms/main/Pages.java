@@ -67,7 +67,7 @@ public class Pages {
 	}
 
 	private static void generatePageOutput(@NonNull Path target, @NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache, String siteName) {
-		Path dynamicPath = target.resolve(page.getIndexedPage().getRelativePath());
+		Path dynamicPath = page.getIndexedPage().getPathResolver().toTargetPath(page.getIndexedPage().getId());
 		if (!collectedNames.contains(dynamicPath)) {
 			ensureDirectory(dynamicPath);
 			try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
@@ -105,12 +105,12 @@ public class Pages {
 			mostRecentModified = Math.max(page.getTimeModified().getMillis(), mostRecentModified);
 			result.add(page);
 		}
-		Comparator<IndexedPage> comparator = IndexedPage.createDateComparator(mostRecentCreated, mostRecentModified);
+		Comparator<IndexedPage> comparator = IndexedPage.createDateComparator();
 		Collections.sort(result, comparator);
 		return ImmutableList.copyOf(result);
 	}
 
-	private static @NonNull Set<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PathResolver uuidRelativeLinks, List<Path> toCopy, int levels) {
+	private static @NonNull Set<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PathResolver pathResolver, List<Path> toCopy, int levels) {
 		List<Directory> subDirectories = new ArrayList<>();
 		Path realSource = PathUtil.realAndNormalized(source);
 		subDirectories.add(new Directory(realSource, 1));
@@ -146,7 +146,7 @@ public class Pages {
 
 							if (HTML_PATTERN.matcher(name).find()) {
 								if (!collected.contains(file)) {
-									result.add(new DefaultPathInfo(realSource, file.normalize()));
+									result.add(new DefaultPathInfo(pathResolver, file.normalize()));
 									collected.add(file);
 								}
 								else {
@@ -172,13 +172,13 @@ public class Pages {
 		return Collections.unmodifiableSet(result);
 	}
 
-	private static void collectPages(@NonNull Path rootPath, List<IndexedPage> collectedPages, List<Path> toCopy, int levels, @NonNull PathResolver uuidRelativeLinks) throws IOException {
-		Set<PathInfo> infos = collectPathInfos(rootPath, uuidRelativeLinks, toCopy, levels);
+	private static void collectPages(@NonNull Path rootPath, List<IndexedPage> collectedPages, List<Path> toCopy, int levels, @NonNull PathResolver pathResolver) throws IOException {
+		Set<PathInfo> infos = collectPathInfos(rootPath, pathResolver, toCopy, levels);
 		for (PathInfo info : infos) {
 			try {
-				collectedPages.add(readFile(info, uuidRelativeLinks));
+				collectedPages.add(readFile(info, pathResolver));
 			} catch (PageException e) {
-				log.error("Not a valid source file: " + info.getPath(), e);
+				log.error("Not a valid source file: " + info.getId(), e);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -197,11 +197,11 @@ public class Pages {
 		pages.forEach((page) -> page.replaceLastArticlesReference(sortedPages));
 	}
 
-	private static IndexedPage readFile(PathInfo pageInfo, @NonNull PathResolver uuidRelativeLinks) throws IOException {
-		try (InputStream fileStream = new FileInputStream(pageInfo.getPath().toFile())) {
+	private static IndexedPage readFile(PathInfo pageInfo, @NonNull PathResolver pathResolver) throws IOException {
+		try (InputStream fileStream = new FileInputStream(pageInfo.getSourcePath().toFile())) {
 			Document document = Jsoup.parse(fileStream, "UTF-8", "");
 
-			return new IndexedPage(document, uuidRelativeLinks, pageInfo);
+			return new IndexedPage(document, pathResolver, pageInfo.getSourcePath());
 		}
 	}
 

@@ -19,16 +19,16 @@ public class Main {
 	public static final String UUID_RELATIVE_LINKS_DEFAULT = "/uuid/";
 
 	public static final Parameter HELP = Parameter.flag("help");
-	public static final Parameter SOURCE = Parameter.single("source-root").withDescription("Contains the sources to generate pages from").mandatory().withShorthand("S");
-	public static final Parameter UUID_RELATIVE_LINKS = Parameter.single("uuid-relative-links").withDescription("Links that start with this will link are assumed to link to the page with the uuid").withDefault(UUID_RELATIVE_LINKS_DEFAULT).withShorthand("U");
-	public static final Parameter TARGET = Parameter.single("target").withDescription("The output directory of pages").mandatory().withShorthand("T");
+	public static final Parameter SOURCE_ROOT = Parameter.single("source-root").withDescription("Contains the sources to generate pages from").mandatory().withShorthand("S");
+	public static final Parameter SOURCE_SITE_PATH = Parameter.single("source-site").withDescription("The pages to handle are in a sub site of the document root");
+	public static final Parameter TARGET_ROOT = Parameter.single("target").withDescription("The output directory of pages").mandatory().withShorthand("T");
 	public static final Parameter COPYRIGHT = Parameter.single("copyright").withDescription("Copyright holder").withShorthand("C");
 
 	private static ParameterReader parameterReader = new ParameterReader(ExtraArgumentStrategy.ALLOW_BOTH,
 			HELP,
-			SOURCE,
-			TARGET,
-			UUID_RELATIVE_LINKS,
+			SOURCE_ROOT,
+			TARGET_ROOT,
+			SOURCE_SITE_PATH,
 			COPYRIGHT);
 
 
@@ -37,14 +37,14 @@ public class Main {
 	}
 
 	public void generatePages(String[] arg) throws IOException {
-		ParameterResults results = parameterReader.read(arg, SOURCE, "config.properties");
+		ParameterResults results = parameterReader.read(arg, SOURCE_ROOT, "config.properties");
 
 		log.info("Configuration\n{}", results);
-		Path target = PathUtil.realAndNormalized(Path.of(results.getValue(TARGET)), (t, p) -> {
+		Path target = PathUtil.realAndNormalized(Path.of(results.getValue(TARGET_ROOT)), (t, p) -> {
 			log.error("Target path cannot be resolved \"{}\": {}", p, t);
 		});
 		String copyRight = results.getValue(COPYRIGHT);
-		Path source = PathUtil.realAndNormalized(Path.of(results.getValue(SOURCE)), (t, p) ->{
+		Path source = PathUtil.realAndNormalized(Path.of(results.getValue(SOURCE_ROOT)), (t, p) ->{
 			log.error("Source path cannot be resolved \"{}\": {}", p, t);
 		});
 		if (!Files.exists(source) || !Files.isDirectory(source)) {
@@ -58,9 +58,9 @@ public class Main {
 			Files.createDirectory(target, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
 		}
 
-		PathResolver uuidRelativeLinks = new PathResolver(Path.of(results.getValue(SOURCE)), Path.of(results.getValue(TARGET)));
-		if (results.isSet(UUID_RELATIVE_LINKS)) {
-			Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks.withSourceSiteRoot(Path.of(results.getValue(UUID_RELATIVE_LINKS))));
+		PathResolver uuidRelativeLinks = new PathResolver(Path.of(results.getValue(SOURCE_ROOT)), Path.of(results.getValue(TARGET_ROOT)));
+		if (results.isSet(SOURCE_SITE_PATH)) {
+			Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks.withSourceSiteRoot(Path.of(results.getValue(SOURCE_SITE_PATH))));
 		}
 		else {
 			Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks);
