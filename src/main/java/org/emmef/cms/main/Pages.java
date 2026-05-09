@@ -24,13 +24,12 @@ public class Pages {
 	private static final Pattern HTML_PATTERN = Pattern.compile("\\.html?$", Pattern.CASE_INSENSITIVE);
 	public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
 
-	public static void readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PathResolver uuidRelativeLinks) throws IOException {
-		List<IndexedPage> collectedPages = new ArrayList<>();
+	public static void readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PathResolver pathResolver) throws IOException {
 		List<Path> toCopy = new ArrayList<>();
-		collectPages(source, collectedPages, toCopy, 3, uuidRelativeLinks);
+		List<IndexedPage> collectedPages = collectPages(source, toCopy, pathResolver);
 		Optional<IndexedPage> rootPage = collectedPages.stream().filter(PathInfo::isRoot).findFirst();
 		String siteName = rootPage.map(IndexedPage::getTitle).orElse("Home");
-
+		SortedSet<PathResolver.PageLink> tags = createTags(collectedPages);
 		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).toList();
 
 		replaceLastArticlesReferences(pageRecords, pageRecords);
@@ -66,7 +65,7 @@ public class Pages {
 		if (!collectedNames.contains(dynamicPath)) {
 			ensureDirectory(dynamicPath);
 			try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
-				log.info("Wrote " + page + " to file " + dynamicPath);
+				log.info("Wrote {} to file {}.", page, dynamicPath);
 
 				page.writePage(output, cache, siteName);
 				collectedNames.add(dynamicPath);
@@ -91,7 +90,7 @@ public class Pages {
 		}
 	}
 
-	private static @NonNull Collection<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PathResolver pathResolver, List<Path> toCopy, int levels) {
+	private static @NonNull Collection<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PathResolver pathResolver, List<Path> toCopy) {
 		List<Directory> subDirectories = new ArrayList<>();
 		Path realSource = PathUtil.realAndNormalized(source);
 		subDirectories.add(new Directory(realSource, 1));
@@ -118,7 +117,7 @@ public class Pages {
 						if (ignore) {
 							log.info("Ignoring {}: {}", isDirectory(file) ? "directory" : "file", file.getFileName());
 						} else if (isDirectory) {
-							if (directory.level < levels) {
+							if (directory.level < 5) {
 								subDirectories.add(new Directory(file, directory.level + 1));
 							}
 						} else {
@@ -150,14 +149,25 @@ public class Pages {
 		return result;
 	}
 
-	private static void collectPages(@NonNull Path rootPath, List<IndexedPage> collectedPages, List<Path> toCopy, int levels, @NonNull PathResolver pathResolver) throws IOException {
-		for (PathInfo info : collectPathInfos(rootPath, pathResolver, toCopy, levels)) {
+	private static List<IndexedPage> collectPages(@NonNull Path rootPath, List<Path> toCopy, @NonNull PathResolver pathResolver) throws IOException {
+		var collectedPages = new ArrayList<IndexedPage>();
+		for (PathInfo info : collectPathInfos(rootPath, pathResolver, toCopy)) {
 			try {
 				collectedPages.add(readFile(info));
 			} catch (PageException e) {
 				log.error("Not a valid source file: {}", info.getPageLink(), e);
 			}
 		}
+		return Collections.unmodifiableList(collectedPages);
+	}
+
+	private static SortedSet<PathResolver.PageLink> createTags(List<IndexedPage> collectedPages) {
+		var tags = new TreeSet<PathResolver.PageLink>();
+		collectedPages.stream()
+				.filter(IndexedPage::isIndex)
+				.forEach(indexedPage -> tags.add(indexedPage.getPageLink()));
+
+		return Collections.unmodifiableSortedSet(tags);
 	}
 
 	private static void replacePageReferences(List<IndexedPage> collectedPages) {

@@ -121,7 +121,8 @@ public class PageRecord {
 		nav.appendElement("a")
 				.attr("class", "site-link")
 				.attr("href", "/")
-				.html(siteName);
+				.html(getIndexedPage().isRoot() ? "/" : siteName);
+
 		nav.appendElement("div").attr("class", "tag-navigation")
 				.appendElement("span").text("TAG1").appendElement("span").text("TAG2").appendElement("span").text("TAG3");
 		header.appendElement("div")
