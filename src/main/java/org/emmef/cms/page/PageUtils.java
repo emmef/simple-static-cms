@@ -2,11 +2,9 @@ package org.emmef.cms.page;
 
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.NonNull;
-import org.checkerframework.checker.nullness.qual.Nullable;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
@@ -81,7 +79,7 @@ public class PageUtils {
 			first.attr("id", SUMMARY_ID);
 			return first;
 		}
-		Element summary = sourceBody.ownerDocument().createElement(SUMMARY_ELEMENT);
+		Element summary = new Document("/").createElement(SUMMARY_ELEMENT);
 		summary.remove();
 		summary.attr("id", SUMMARY_ID);
 		return summary;

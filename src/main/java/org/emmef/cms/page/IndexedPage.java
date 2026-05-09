@@ -64,7 +64,7 @@ public class IndexedPage extends PathInfo {
 		this.timeModified = PageUtils.getTime(head, META_REPUBLISH_DATE, Arrays.asList(() -> this.timePublished, FileTimeStamps.modifiedSupplier(file)));
 		this.article = PageUtils.getArticle(sourceHtml);
 		this.title = DocumentUtils.getTitle(head);
-		this.summary = PageUtils.searchForSummary(article);
+		this.summary = PageUtils.searchForSummary(sourceHtml);
 		this.summaryInListing = summary.clone();
 		this.document = htmlDeclarationFromElement(sourceHtml);
 		this.captionById = PageUtils.createCaptionById(article);
@@ -88,6 +88,7 @@ public class IndexedPage extends PathInfo {
 		}
 		return latestArticle;
 	}
+
 	public void replacePageReferences(@NonNull List<IndexedPage> pages) {
 		replacePageReferences(article, pages, false); //  includes summary
 		noteById.values().forEach(note -> replacePageReferences(article, pages, false));
@@ -97,6 +98,21 @@ public class IndexedPage extends PathInfo {
 	public void replacePageReferences(@NonNull Element element, @NonNull List<IndexedPage> pages, boolean globalize) {
 		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
 	}
+
+	public SequencedSet<PathResolver.PageLink> generateTagList(@NonNull SortedSet<PathResolver.PageLink> existingTagLinks) {
+		var result = new TreeSet<PathResolver.PageLink>();
+		if (isIndex() && !existingTagLinks.contains(getPageLink())) {
+			log.warn("Page \"{}\" ({}) is index, but not marked as tag.", getTitle(), getPageLink().getLink());
+		}
+		getPageLink().createTagHierarchy().stream()
+				.filter(existingTagLinks::contains)
+				.forEach(result::add);
+		if (isIndex()) {
+			result.remove(getPageLink());
+		}
+		return Collections.unmodifiableSortedSet(result);
+	}
+
 
 	private Optional<PageResult> findPage(@NonNull List<IndexedPage> pages, PathResolver.PageLink pageLink, boolean globalize) {
 		if (getPageLink().isSamePage(pageLink)) {
@@ -141,9 +157,8 @@ public class IndexedPage extends PathInfo {
 					anchor.children().remove();
 					anchor.addClass("reference-ptr");
 					if (globalize) {
-						anchor.text("*"+note.number());
-					}
-					else {
+						anchor.text("*" + note.number());
+					} else {
 						anchor.text(note.number().toString());
 					}
 				}
