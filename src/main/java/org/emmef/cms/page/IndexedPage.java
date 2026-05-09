@@ -55,6 +55,7 @@ public class IndexedPage extends PathInfo {
 	private final DateTime timePublished;
 	@Getter
 	private final Document document;
+	private List<Element> mainTagList;
 
 	public IndexedPage(Document document, @NonNull PathInfo info) {
 		super(info);
@@ -74,6 +75,11 @@ public class IndexedPage extends PathInfo {
 		this.noteById = footNoteScanner.scanForNotes(sourceHtml, article);
 		footNoteScanner.removeManagedNotes(article);
 		this.latestArticles = searchForLatestArticles(article);
+	}
+
+	@Override
+	public String toString() {
+		return String.format("%s %s \"%s\"", IndexedPage.class.getSimpleName(), getPageLink().getLink(), title);
 	}
 
 	private Element searchForLatestArticles(Element sourceBody) {
@@ -101,18 +107,49 @@ public class IndexedPage extends PathInfo {
 		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
 	}
 
-	public SequencedSet<PageLink> generateTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
-		var result = new TreeSet<PageLink>();
-		if (isIndex() && !existingTagLinks.contains(getPageLink())) {
-			log.warn("Page \"{}\" ({}) is index, but not marked as tag.", getTitle(), getPageLink().getLink());
+	public List<Element> getMainTagList() {
+		return mainTagList != null ? mainTagList : List.of();
+	}
+
+	public void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks, @NonNull SequencedCollection<IndexedPage> pages) {
+		if (this.mainTagList == null) {
+			var links = new TreeSet<PageLink>();
+			if (isIndex() && !existingTagLinks.contains(getPageLink())) {
+				log.warn("Page \"{}\" ({}) is index, but not marked as tag.", getTitle(), getPageLink().getLink());
+			}
+			getPageLink().createTagHierarchy().stream()
+					.filter(existingTagLinks::contains)
+					.forEach(links::add);
+			if (isIndex()) {
+				links.remove(getPageLink());
+			}
+			var anchors = new ArrayList<Element>();
+			Element factory = new Document("/").createElement(ANCHOR_ELEMENT);
+			links.forEach(link -> {
+				Element anchor = factory.clone();
+				anchor.attr("href", getResolver().toTargetHref(link));
+				pages.stream()
+						.filter(l -> l.getPageLink().isSamePage(link))
+						.findFirst()
+						.ifPresentOrElse(p -> anchor.html(nonBreakingText(p.getTitle())), () -> anchor.html(nonBreakingText(link.getLink())));
+				anchors.add(anchor);
+			});
+
+			this.mainTagList = Collections.unmodifiableList(anchors);
 		}
-		getPageLink().createTagHierarchy().stream()
-				.filter(existingTagLinks::contains)
-				.forEach(result::add);
-		if (isIndex()) {
-			result.remove(getPageLink());
+	}
+
+	private static @NonNull String nonBreakingText(@NonNull String text) {
+		StringBuilder result = new StringBuilder();
+		for (String part : text.split("\\p{Space}")) {
+			if (!part.isBlank()) {
+				if (!result.isEmpty()) {
+					result.append("&nbsp;");
+				}
+				result.append(part);
+			}
 		}
-		return Collections.unmodifiableSortedSet(result);
+		return result.toString();
 	}
 
 
@@ -147,7 +184,6 @@ public class IndexedPage extends PathInfo {
 				if (anchor.text().isBlank()) {
 					anchor.children().remove();
 					anchor.text(element.text());
-//					element.children().forEach(child -> anchor.children().add(child.clone()));
 				}
 			}));
 		}

@@ -48,7 +48,7 @@ public class DocumentUtils {
 		if (title == null || title.isEmpty()) {
 			throw new PageException("Title must not be empty");
 		}
-		return title.trim().replaceAll("\\s+", " ").replaceAll("\\s", PageRecord.NBSP);
+		return title.trim().replaceAll("\\s+", " ");
 	}
 
 	public static <T> @NonNull T getMetaValue(@NonNull Node head, @NonNull String nameValue, @NonNull String description, @NonNull Function<String, T> converter) {

@@ -37,9 +37,10 @@ public class Pages {
 		SortedSet<PageLink> tags = createTags(collectedPages);
 		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).toList();
 
-		replaceLastArticlesReferences(pageRecords, pageRecords);
-		appendReferences(pageRecords);
-		replacePageReferences(collectedPages);
+		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords));
+		pageRecords.forEach(PageRecord::appendReferences);
+		collectedPages.forEach((page1) -> page1.replacePageReferences(collectedPages));
+		collectedPages.forEach(page -> page.generateMainTagList(tags, collectedPages));
 
 		Set<Path> collectedNames = new TreeSet<>();
 		Map<String, Object> cache = new HashMap<>();
@@ -173,18 +174,6 @@ public class Pages {
 				.forEach(indexedPage -> tags.add(indexedPage.getPageLink()));
 
 		return Collections.unmodifiableSortedSet(tags);
-	}
-
-	private static void replacePageReferences(List<IndexedPage> collectedPages) {
-		collectedPages.forEach((page) -> page.replacePageReferences(collectedPages));
-	}
-
-	private static void appendReferences(List<PageRecord> collectedPages) {
-		collectedPages.forEach(PageRecord::appendReferences);
-	}
-
-	private static void replaceLastArticlesReferences(Collection<PageRecord> pages, List<PageRecord> sortedPages) {
-		pages.forEach((page) -> page.replaceLastArticlesReference(sortedPages));
 	}
 
 	private static IndexedPage readFile(PathInfo pageInfo) throws IOException {
