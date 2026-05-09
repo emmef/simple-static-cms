@@ -4,7 +4,6 @@ import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.util.*;
 import org.joda.time.DateTime;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.NodeVisitor;
@@ -59,7 +58,7 @@ public class PageRecord {
 		if (i != 0) {
 			return i;
 		}
-		return p1.getIndexedPage().getId().compareTo(p2.getIndexedPage().getId());
+		return p1.getIndexedPage().getPageLink().compareTo(p2.getIndexedPage().getPageLink());
 	};
 
 	public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd");
@@ -78,11 +77,11 @@ public class PageRecord {
 
 	@Override
 	public String toString() {
-		return "Page \"" + indexedPage.getTitle() + "\" (" + indexedPage.getId() + ")";
+		return "Page \"" + indexedPage.getTitle() + "\" (" + indexedPage.getPageLink() + ")";
 	}
 
 	public String getAbsoluteUrl() {
-		return indexedPage.getResolver().toTargetHref(indexedPage.getId());
+		return indexedPage.getResolver().toTargetHref(indexedPage.getPageLink());
 	}
 
 	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName) throws IOException {
@@ -426,7 +425,7 @@ public class PageRecord {
 	}
 
 	public String getId() {
-		return indexedPage.getId().toString();
+		return indexedPage.getPageLink().toString();
 	}
 
 	public String getTitle() {

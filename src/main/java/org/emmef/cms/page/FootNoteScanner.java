@@ -30,6 +30,7 @@ class FootNoteScanner {
 				added.putAll(handleFootNotes(note, referenced, allNotes));
 			});
 		}
+
 		ImmutableMap.Builder<String, Note> builder = ImmutableMap.builder();
 		AtomicInteger counter = new AtomicInteger();
 		referenced.forEach((id, note) -> {
