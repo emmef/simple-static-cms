@@ -122,9 +122,7 @@ public class PageRecord {
 		// Add main tag navigation
 		List<PageLink> mainTagList = getIndexedPage().getMainTagList();
 		mainTagList.forEach(anchor -> {
-			tags.appendElement("span").classNames(Collections.singleton("main-tag-navigation-before"));
-			addTagElement(tags, anchor, pages);
-			tags.appendElement("span").classNames(Collections.singleton("main-tag-navigation-after"));
+			addTagLinkWithPadding(tags, anchor, pages, "main-tag-navigation-before", null, "main-tag-navigation-after");
 		});
 
 		nav.appendElement("span")
@@ -140,11 +138,27 @@ public class PageRecord {
 		}
 	}
 
-	private void addTagElement(@NonNull Element parent, @NonNull PageLink anchor, @NonNull SequencedCollection<IndexedPage> pages) {
-		pages.stream().filter(p -> p.getPageLink().equals(anchor)).findFirst().ifPresent(page -> {
+	private void addTagLinkWithPadding(Element parent, PageLink anchor, @NonNull SequencedCollection<IndexedPage> pages, String beforeClass, String anchorClass, String afterClass) {
+		Element beforeSpan = parent.appendElement("span");
+		if (beforeClass != null) {
+			beforeSpan.addClass(beforeClass);
+		}
+		addTagElement(parent, anchor, pages, anchorClass);
+		Element afterSpan = parent.appendElement("span");
+		if (afterClass != null) {
+			afterSpan.addClass(afterClass);
+		}
+	}
+
+	private void addTagElement(@NonNull Element parent, @NonNull PageLink tag, @NonNull SequencedCollection<IndexedPage> pages, String optionalClass) {
+		pages.stream().filter(p -> p.getPageLink().equals(tag)).findFirst().ifPresent(page -> {
 			Element element = parent.appendElement("a");
-			element.attr("href", indexedPage.getResolver().toTargetHref(anchor));
+			element.attr("href", indexedPage.getResolver().toTargetHref(tag));
+			if (optionalClass != null) {
+				element.attr("class", optionalClass);
+			}
 			element.html(nonBreakingText(page.getTitle()));
+			;
 		});
 	}
 
@@ -223,7 +237,7 @@ public class PageRecord {
 		return DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified1.getMillis()).toZonedDateTime());
 	}
 
-	public void replaceLastArticlesReference(@NonNull List<PageRecord> sortedPages) {
+	public void replaceLastArticlesReference(@NonNull List<PageRecord> sortedPages, @NonNull SequencedCollection<PageLink> tags, @NonNull SequencedCollection<IndexedPage> pages) {
 		Element latestArticlesElement = indexedPage.getLatestArticles();
 		if (latestArticlesElement == null) {
 			return;
@@ -232,6 +246,20 @@ public class PageRecord {
 			// No indices for non-index pages; remove the element
 			latestArticlesElement.remove();
 			return;
+		}
+		latestArticlesElement.children().remove();
+		List<PageLink> subTags = tags.stream()
+				.filter(tag -> {
+					return tag.stripFile().startsWith(getIndexedPage().getPageLink().stripFile());
+				})
+				.filter(tag -> !tag.equals(getIndexedPage().getPageLink())).toList();
+		if (!subTags.isEmpty()) {
+			Element subTagList = latestArticlesElement.prependElement("div").attr("class", "sub-tag-list");
+			addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages, "sub-tag-before", "tag-selected", "sub-tag-after");
+			subTagList.appendElement("span").addClass("sub-tag-separator");
+			subTags.forEach(tag -> {
+				addTagLinkWithPadding(subTagList, tag, pages, "sub-tag-before", null, "sub-tag-after");
+			});
 		}
 
 		var matchingPages = getMatchingPages(sortedPages);

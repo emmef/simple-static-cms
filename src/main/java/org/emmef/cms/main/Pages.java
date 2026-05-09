@@ -35,12 +35,14 @@ public class Pages {
 		Optional<IndexedPage> rootPage = collectedPages.stream().filter(PathInfo::isRoot).findFirst();
 		String siteName = rootPage.map(IndexedPage::getTitle).orElse("Home");
 		SortedSet<PageLink> tags = createTags(collectedPages);
-		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).toList();
+		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).sorted((o1, o2) -> {
+			return o1.getIndexedPage().getTitle().compareTo(o2.getIndexedPage().getTitle());
+		}).toList();
 
 		pageRecords.forEach(PageRecord::appendReferences);
 		collectedPages.forEach((page1) -> page1.replacePageReferences(collectedPages));
 		collectedPages.forEach(page -> page.generateMainTagList(tags));
-		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords));
+		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords, tags, collectedPages));
 
 		Set<Path> collectedNames = new TreeSet<>();
 		Map<String, Object> cache = new HashMap<>();

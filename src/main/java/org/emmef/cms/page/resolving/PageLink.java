@@ -107,6 +107,14 @@ public class PageLink implements Comparable<PageLink> {
 		return page.equals(other.getPage());
 	}
 
+	public @NonNull String stripFile() {
+		if (isLocal()) {
+			throw new IllegalArgumentException("Cannot strip file from a local page link: " + this);
+		}
+		int index = link.lastIndexOf(PathResolver.URL_PATH_SEPARATOR);
+		return (index >= 0) ? link.substring(0, index) : "";
+	}
+
 	@Override
 	public int compareTo(@NonNull PageLink o) {
 		return link.compareTo(o.link);
