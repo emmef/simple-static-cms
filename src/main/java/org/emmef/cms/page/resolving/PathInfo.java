@@ -1,11 +1,9 @@
-package org.emmef.cms.page;
+package org.emmef.cms.page.resolving;
 
 import lombok.Getter;
 import lombok.NonNull;
 
 import java.nio.file.Path;
-
-import static org.emmef.cms.page.PathResolver.PageLink;
 
 @Getter
 public class PathInfo {

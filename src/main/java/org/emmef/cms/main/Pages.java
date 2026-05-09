@@ -2,7 +2,12 @@ package org.emmef.cms.main;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.emmef.cms.page.*;
+import org.emmef.cms.page.IndexedPage;
+import org.emmef.cms.page.PageException;
+import org.emmef.cms.page.PageRecord;
+import org.emmef.cms.page.resolving.PageLink;
+import org.emmef.cms.page.resolving.PathInfo;
+import org.emmef.cms.page.resolving.PathResolver;
 import org.emmef.cms.util.PathUtil;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -29,7 +34,7 @@ public class Pages {
 		List<IndexedPage> collectedPages = collectPages(source, toCopy, pathResolver);
 		Optional<IndexedPage> rootPage = collectedPages.stream().filter(PathInfo::isRoot).findFirst();
 		String siteName = rootPage.map(IndexedPage::getTitle).orElse("Home");
-		SortedSet<PathResolver.PageLink> tags = createTags(collectedPages);
+		SortedSet<PageLink> tags = createTags(collectedPages);
 		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).toList();
 
 		replaceLastArticlesReferences(pageRecords, pageRecords);
@@ -161,8 +166,8 @@ public class Pages {
 		return Collections.unmodifiableList(collectedPages);
 	}
 
-	private static SortedSet<PathResolver.PageLink> createTags(List<IndexedPage> collectedPages) {
-		var tags = new TreeSet<PathResolver.PageLink>();
+	private static SortedSet<PageLink> createTags(List<IndexedPage> collectedPages) {
+		var tags = new TreeSet<PageLink>();
 		collectedPages.stream()
 				.filter(IndexedPage::isIndex)
 				.forEach(indexedPage -> tags.add(indexedPage.getPageLink()));

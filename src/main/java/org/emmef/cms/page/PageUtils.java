@@ -2,6 +2,8 @@ package org.emmef.cms.page;
 
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.NonNull;
+import org.emmef.cms.page.resolving.PageLink;
+import org.emmef.cms.page.resolving.PathResolver;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
@@ -85,7 +87,7 @@ public class PageUtils {
 		return summary;
 	}
 
-	public static void scanForManagedPageLinks(@NonNull PathResolver resolver, @NonNull Element element, @NonNull Consumer<PathResolver.PageLink> consumer) {
+	public static void scanForManagedPageLinks(@NonNull PathResolver resolver, @NonNull Element element, @NonNull Consumer<PageLink> consumer) {
 		element.getElementsByTag(ANCHOR_ELEMENT).stream().map(node -> {
 			String href = node.attr("href").trim();
 			if (href.isBlank()) {
@@ -97,13 +99,13 @@ public class PageUtils {
 		});
 	}
 
-	public static void scanForManagedAnchors(@NonNull PathResolver resolver, @NonNull Element element, @NonNull BiConsumer<Element, PathResolver.PageLink> consumer) {
+	public static void scanForManagedAnchors(@NonNull PathResolver resolver, @NonNull Element element, @NonNull BiConsumer<Element, PageLink> consumer) {
 		element.getElementsByTag(ANCHOR_ELEMENT).forEach(node -> {
 			String href = node.attr("href").trim();
 			if (href.isBlank()) {
 				return;
 			}
-			PathResolver.PageLink link = resolver.fromSourceHref(href);
+			PageLink link = resolver.fromSourceHref(href);
 			if (link != null) {
 				consumer.accept(node, link);
 			}

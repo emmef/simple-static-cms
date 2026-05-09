@@ -2,7 +2,7 @@ package org.emmef.cms.main;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.emmef.cms.page.PathResolver;
+import org.emmef.cms.page.resolving.PathResolver;
 import org.emmef.cms.parameters.ExtraArgumentStrategy;
 import org.emmef.cms.parameters.Parameter;
 import org.emmef.cms.parameters.ParameterReader;

@@ -1,11 +1,11 @@
 package org.emmef.cms.page;
 
 import lombok.NonNull;
+import org.emmef.cms.page.resolving.PageLink;
+import org.emmef.cms.page.resolving.PathResolver;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.Assert;
-
-import static org.emmef.cms.page.PathResolver.PageLink;
 
 import java.io.File;
 import java.io.IOException;

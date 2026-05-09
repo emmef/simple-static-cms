@@ -3,6 +3,8 @@ package org.emmef.cms.page;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.emmef.cms.page.resolving.PageLink;
+import org.emmef.cms.page.resolving.PathInfo;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.util.FileTimeStamps;
 import org.joda.time.DateTime;
@@ -99,8 +101,8 @@ public class IndexedPage extends PathInfo {
 		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
 	}
 
-	public SequencedSet<PathResolver.PageLink> generateTagList(@NonNull SortedSet<PathResolver.PageLink> existingTagLinks) {
-		var result = new TreeSet<PathResolver.PageLink>();
+	public SequencedSet<PageLink> generateTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
+		var result = new TreeSet<PageLink>();
 		if (isIndex() && !existingTagLinks.contains(getPageLink())) {
 			log.warn("Page \"{}\" ({}) is index, but not marked as tag.", getTitle(), getPageLink().getLink());
 		}
@@ -114,7 +116,7 @@ public class IndexedPage extends PathInfo {
 	}
 
 
-	private Optional<PageResult> findPage(@NonNull List<IndexedPage> pages, PathResolver.PageLink pageLink, boolean globalize) {
+	private Optional<PageResult> findPage(@NonNull List<IndexedPage> pages, PageLink pageLink, boolean globalize) {
 		if (getPageLink().isSamePage(pageLink)) {
 			return findInPage(pageLink, globalize);
 		}
@@ -126,9 +128,9 @@ public class IndexedPage extends PathInfo {
 		return Optional.empty();
 	}
 
-	private Optional<PageResult> findInPage(PathResolver.PageLink pageLink, boolean globalize) {
-		PathResolver.PageLink globalized = getPageLink().globalize(pageLink);
-		PathResolver.PageLink transformed = globalize ? globalized : getPageLink().localize(pageLink);
+	private Optional<PageResult> findInPage(PageLink pageLink, boolean globalize) {
+		PageLink globalized = getPageLink().globalize(pageLink);
+		PageLink transformed = globalize ? globalized : getPageLink().localize(pageLink);
 		if (pageLink.isPage()) {
 			return Optional.of(new PageResult(globalized, (anchor) -> {
 				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
@@ -167,6 +169,6 @@ public class IndexedPage extends PathInfo {
 		return Optional.empty();
 	}
 
-	private record PageResult(PathResolver.PageLink link, Consumer<Element> elementContentModifier) {
+	private record PageResult(PageLink link, Consumer<Element> elementContentModifier) {
 	}
 }
