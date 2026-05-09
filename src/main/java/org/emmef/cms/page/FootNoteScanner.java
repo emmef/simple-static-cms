@@ -26,16 +26,12 @@ class FootNoteScanner {
 			referenced.putAll(added);
 			var copy = new HashMap<>(added);
 			added.clear();
-			copy.values().forEach(note -> {
-				added.putAll(handleFootNotes(note, referenced, allNotes));
-			});
+			copy.values().forEach(note -> added.putAll(handleFootNotes(note, referenced, allNotes)));
 		}
 
 		ImmutableMap.Builder<String, Note> builder = ImmutableMap.builder();
 		AtomicInteger counter = new AtomicInteger();
-		referenced.forEach((id, note) -> {
-			builder.put(id, new Note(note, counter.incrementAndGet()));
-		});
+		referenced.forEach((id, note) -> builder.put(id, new Note(note, counter.incrementAndGet())));
 		return builder.build();
 	}
 
