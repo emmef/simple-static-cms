@@ -27,6 +27,7 @@ public class PageUtils {
 	public static final String SUMMARY_ELEMENT = "p";
 	public static final String SUMMARY_ID = "article-summary";
 	public static final DateTime ZERO_DATE = new DateTime(0);
+	private static Object log;
 
 	public static @NonNull Element getArticle(@NonNull Element sourceDocument) {
 		Element sourceBody = DocumentUtils.getNodeByTag(sourceDocument, "body", NodeExpectation.UNIQUE);

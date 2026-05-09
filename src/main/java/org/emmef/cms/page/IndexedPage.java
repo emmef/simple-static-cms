@@ -55,7 +55,7 @@ public class IndexedPage extends PathInfo {
 	private final DateTime timePublished;
 	@Getter
 	private final Document document;
-	private List<Element> mainTagList;
+	private List<PageLink> mainTagList;
 
 	public IndexedPage(Document document, @NonNull PathInfo info) {
 		super(info);
@@ -69,6 +69,7 @@ public class IndexedPage extends PathInfo {
 		this.title = DocumentUtils.getTitle(head);
 		this.summary = PageUtils.searchForSummary(sourceHtml);
 		this.summaryInListing = summary.clone();
+		log.info(" -> Summary: {}", summaryInListing);
 		this.document = htmlDeclarationFromElement(sourceHtml);
 		this.captionById = PageUtils.createCaptionById(article);
 		FootNoteScanner footNoteScanner = new FootNoteScanner(getResolver(), getPageLink());
@@ -107,11 +108,11 @@ public class IndexedPage extends PathInfo {
 		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
 	}
 
-	public List<Element> getMainTagList() {
+	public List<PageLink> getMainTagList() {
 		return mainTagList != null ? mainTagList : List.of();
 	}
 
-	public void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks, @NonNull SequencedCollection<IndexedPage> pages) {
+	public void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
 		if (this.mainTagList == null) {
 			var links = new TreeSet<PageLink>();
 			if (isIndex() && !existingTagLinks.contains(getPageLink())) {
@@ -123,33 +124,20 @@ public class IndexedPage extends PathInfo {
 			if (isIndex()) {
 				links.remove(getPageLink());
 			}
-			var anchors = new ArrayList<Element>();
-			Element factory = new Document("/").createElement(ANCHOR_ELEMENT);
-			links.forEach(link -> {
-				Element anchor = factory.clone();
-				anchor.attr("href", getResolver().toTargetHref(link));
-				pages.stream()
-						.filter(l -> l.getPageLink().isSamePage(link))
-						.findFirst()
-						.ifPresentOrElse(p -> anchor.html(nonBreakingText(p.getTitle())), () -> anchor.html(nonBreakingText(link.getLink())));
-				anchors.add(anchor);
-			});
+//			var anchors = new ArrayList<Element>();
+//			Element factory = new Document("/").createElement(ANCHOR_ELEMENT);
+//			links.forEach(link -> {
+//				Element anchor = factory.clone();
+//				anchor.attr("href", getResolver().toTargetHref(link));
+//				pages.stream()
+//						.filter(l -> l.getPageLink().isSamePage(link))
+//						.findFirst()
+//						.ifPresentOrElse(p -> anchor.html(nonBreakingText(p.getTitle())), () -> anchor.html(nonBreakingText(link.getLink())));
+//				anchors.add(anchor);
+//			});
 
-			this.mainTagList = Collections.unmodifiableList(anchors);
+			this.mainTagList = List.copyOf(links);
 		}
-	}
-
-	private static @NonNull String nonBreakingText(@NonNull String text) {
-		StringBuilder result = new StringBuilder();
-		for (String part : text.split("\\p{Space}")) {
-			if (!part.isBlank()) {
-				if (!result.isEmpty()) {
-					result.append("&nbsp;");
-				}
-				result.append(part);
-			}
-		}
-		return result.toString();
 	}
 
 

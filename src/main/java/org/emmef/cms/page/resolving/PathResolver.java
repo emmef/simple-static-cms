@@ -60,41 +60,11 @@ public class PathResolver {
 	}
 
 	public PageLink fromSourceHref(@NonNull String href) {
-		if (href.isBlank()) {
-			return null;
-		}
-		String trimmedHref = URLDecoder.decode(href.trim(), StandardCharsets.UTF_8);
-		if (trimmedHref.startsWith(LOCAL_LINK.toString())) {
-			String trimmedLocalId = trimmedHref.substring(1).trim();
-			if (trimmedLocalId.isBlank()) {
-				return null;
-			}
-			return PageLink.of(null, trimmedLocalId);
-		}
+		return fromHref(href, sourceRefStartsWith); // fromTargetHref
+	}
 
-		if (!isPartOfSource(trimmedHref)) {
-			return null;
-		}
-		String relative = trimmedHref.substring(sourceRefStartsWith.length() - 1).trim();
-		int localRefIdx = relative.lastIndexOf(LOCAL_LINK);
-		if (localRefIdx == -1) {
-			if (relative.isBlank()) {
-				return null;
-			}
-			return PageLink.of(relative, null);
-		}
-		String pageId = relative.substring(0, localRefIdx);
-		String localId = relative.substring(localRefIdx + 1);
-		if (pageId.isBlank()) {
-			if (localId.isBlank()) {
-				return null;
-			}
-			return PageLink.of(null, localId);
-		} else if (localId.isBlank()) {
-			return PageLink.of(pageId, null);
-		} else {
-			return PageLink.of(pageId, localId);
-		}
+	public PageLink fromTargetHref(@NonNull String href) {
+		return fromHref(href, targetRefStartsWith); // fromTargetHref
 	}
 
 	public @NonNull String toTargetHref(@NonNull PageLink link) {
@@ -142,6 +112,44 @@ public class PathResolver {
 		this.targetSiteRootPath = resolveSiteRoot(this.targetDocumentRootPath, targetSiteRootPath, "target");
 		this.sourceRefStartsWith = resolveSourceStartsWith(sourceDocumentRootPath, sourceSiteRootPath);
 		this.targetRefStartsWith = resolveSourceStartsWith(targetDocumentRootPath, targetSiteRootPath);
+	}
+
+	private PageLink fromHref(@NonNull String href, @NonNull String startsWith) {
+		if (href.isBlank()) {
+			return null;
+		}
+		String trimmedHref = URLDecoder.decode(href.trim(), StandardCharsets.UTF_8);
+		if (trimmedHref.startsWith(LOCAL_LINK.toString())) {
+			String trimmedLocalId = trimmedHref.substring(1).trim();
+			if (trimmedLocalId.isBlank()) {
+				return null;
+			}
+			return PageLink.of(null, trimmedLocalId);
+		}
+
+		if (!isPartOfSource(trimmedHref)) {
+			return null;
+		}
+		String relative = trimmedHref.substring(startsWith.length() - 1).trim();
+		int localRefIdx = relative.lastIndexOf(LOCAL_LINK);
+		if (localRefIdx == -1) {
+			if (relative.isBlank()) {
+				return null;
+			}
+			return PageLink.of(relative, null);
+		}
+		String pageId = relative.substring(0, localRefIdx);
+		String localId = relative.substring(localRefIdx + 1);
+		if (pageId.isBlank()) {
+			if (localId.isBlank()) {
+				return null;
+			}
+			return PageLink.of(null, localId);
+		} else if (localId.isBlank()) {
+			return PageLink.of(pageId, null);
+		} else {
+			return PageLink.of(pageId, localId);
+		}
 	}
 
 	private static String replaceUpperCase(String page) {
