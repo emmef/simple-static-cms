@@ -3,6 +3,8 @@ package org.emmef.cms.page;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.NonNull;
+import org.emmef.cms.page.resolving.PageLink;
+import org.emmef.cms.page.resolving.PathResolver;
 import org.jsoup.nodes.Element;
 
 import java.util.HashMap;
@@ -15,7 +17,7 @@ import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
 @Data
 class FootNoteScanner {
 	private final PathResolver pathResolver;
-	private final PathResolver.PageLink page;
+	private final PageLink page;
 
 	public Map<String, Note> scanForNotes(@NonNull Element sourceDocument, @NonNull Element article) {
 		var allNotes = findAllNotesById(sourceDocument);
@@ -60,7 +62,7 @@ class FootNoteScanner {
 	private LinkedHashMap<String, Element> handleFootNotes(Element element, Map<String, Element> referenced, Map<String, Element> allNotes) {
 		var result = new LinkedHashMap<String, Element>();
 		PageUtils.scanForManagedAnchors(pathResolver, element, (anchor, link) -> {
-			PathResolver.PageLink localized = page.localize(link);
+			PageLink localized = page.localize(link);
 			if (!localized.isLocal()) {
 				return;
 			}
