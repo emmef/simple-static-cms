@@ -8,7 +8,9 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
 import java.io.*;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
@@ -72,7 +74,7 @@ public class Pages {
 				log.error("Error writing page {} to file {}", page, page.getIndexedPage(), e);
 			}
 		} else {
-			log.error("NOT writing page \"{}\" [{}] with already existing title", page.getTitle(), page.getId());
+			log.error("NOT writing page \"{}\" [{}] with already existing title", page.getIndexedPage().getTitle(), page.getIndexedPage().getPageLink());
 		}
 	}
 

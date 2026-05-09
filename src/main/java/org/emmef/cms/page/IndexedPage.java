@@ -31,20 +31,6 @@ public class IndexedPage extends PathInfo {
 	public static final String LATEST_ARTICLE_ELEMENT = "section";
 	public static final String LATEST_ARTICLE_ID = "latest-articles";
 
-	public static Comparator<IndexedPage> createDateComparator() {
-		return (p1, p2) -> {
-			int compareModified = p1.timeModified.compareTo(p2.timeModified);
-			if (compareModified != 0) {
-				return compareModified;
-			}
-			int comparePublished = p1.timePublished.compareTo(p2.timePublished);
-			if (comparePublished != 0) {
-				return comparePublished;
-			}
-			return p1.getPageLink().compareTo(p2.getPageLink());
-		};
-	}
-
 	@Getter
 	private final @NonNull String title;
 	@Getter

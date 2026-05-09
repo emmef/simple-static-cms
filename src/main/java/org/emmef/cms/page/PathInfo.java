@@ -32,9 +32,7 @@ public class PathInfo {
 		ImmutableList.Builder<String> tagBuilder = new ImmutableList.Builder<>();
 		Path parent = Path.of(pageId).getParent();
 		if (parent != null) {
-			parent.forEach(path -> {
-				tagBuilder.add(path.getFileName().toString());
-			});
+			parent.forEach(path -> tagBuilder.add(path.getFileName().toString()));
 		}
 		this.mainTag = tagBuilder.build();
 	}

@@ -61,7 +61,7 @@ public class PathResolver {
 	}
 
 	public PageLink fromSourceHref(@NonNull String href) {
-		if (href == null || href.isBlank()) {
+		if (href.isBlank()) {
 			return null;
 		}
 		String trimmedHref = URLDecoder.decode(href.trim(), StandardCharsets.UTF_8);
@@ -146,9 +146,7 @@ public class PathResolver {
 	}
 
 	private static String replaceUpperCase(String page) {
-		return REPLACE_UPPER_CASE.matcher(page).replaceAll(g -> {
-			return "_" + g.group(0).toLowerCase();
-		});
+		return REPLACE_UPPER_CASE.matcher(page).replaceAll(g -> "_" + g.group(0).toLowerCase());
 	}
 
 	private @NonNull String resolveSourceStartsWith(@NonNull Path documentRootPath, Path siteRootPath) {
@@ -189,7 +187,7 @@ public class PathResolver {
 		}
 	}
 
-	@EqualsAndHashCode(callSuper = false, of = {"normalized"})
+	@EqualsAndHashCode(callSuper = false)
 	public static class PageLink implements Comparable<PageLink> {
 		public static final PageLink NONE = new PageLink(null, null);
 		@Getter
@@ -249,8 +247,8 @@ public class PathResolver {
 		}
 
 		@Override
-		public int compareTo(PageLink o) {
-			return o == null ? 1 : link.compareTo(o.link);
+		public int compareTo(@NonNull PageLink o) {
+			return link.compareTo(o.link);
 		}
 
 		private static PageLink of(String pageId, String localId) {

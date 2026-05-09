@@ -1,11 +1,14 @@
 package org.emmef.cms.page;
 
-import lombok.*;
+import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.emmef.cms.util.*;
+import org.emmef.cms.util.NodeHelper;
 import org.joda.time.DateTime;
-import org.jsoup.nodes.*;
+import org.jsoup.nodes.DataNode;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
 import org.jsoup.select.NodeVisitor;
 
 import java.io.IOException;
@@ -13,7 +16,6 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.regex.Pattern;
 
 /**
  * TODO A page will contain tags in link tags in the header
@@ -26,8 +28,6 @@ import java.util.regex.Pattern;
 @Slf4j
 public class PageRecord {
 	private static final String reservedChars = "|\\?*<:>+[]/";
-	private static final int MAX_NAME_LENGTH = 255;
-	private static final String HTML_SUFFIX = ".html";
 
 	public static final String SUMMARY_ELEMENT = "p";
 	public static final String SUMMARY_ID = "article-summary";
@@ -36,8 +36,6 @@ public class PageRecord {
 	public static final String STYLE_CSS = "/style/simple-static-cms.css";
 	public static final String PAGE_COPYRIGHT = "copyright";
 	public static final String REFERENCE_LIST = "reference-list";
-	public static final Pattern PATTERN_NOT_ALPHANUMERIC = Pattern.compile("[^\\p{Alnum}]");
-	public static final Pattern PATTERN_UPPER = Pattern.compile("[\\p{Upper}]");
 
 	private final Element header;
 
@@ -48,26 +46,10 @@ public class PageRecord {
 	private List<Node> summary;
 	@NonNull
 	private final Element footer;
-	private boolean index;
-
-	private final SortedSet<PageRecord> children = createPageSet();
-	private SortedSet<PageRecord> siblings = null;
-
-	public static final Comparator<PageRecord> COMPARE_BY_NAME = (p1, p2) -> {
-		int i = p1.getIndexedPage().getTitle().compareToIgnoreCase(p2.getIndexedPage().getTitle());
-		if (i != 0) {
-			return i;
-		}
-		return p1.getIndexedPage().getPageLink().compareTo(p2.getIndexedPage().getPageLink());
-	};
 
 	public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd");
 
-	public static TreeSet<PageRecord> createPageSet() {
-		return new TreeSet<PageRecord>(COMPARE_BY_NAME);
-	}
-
-	public PageRecord(IndexedPage page) {
+	public PageRecord(@NonNull IndexedPage page) {
 		this.indexedPage = page;
 		this.document = indexedPage.getDocument();
 		this.header = this.document.createElement("header");
@@ -85,7 +67,7 @@ public class PageRecord {
 	}
 
 	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName) throws IOException {
-		addHead(cache);
+		addHead();
 		addBody((String) cache.get(PAGE_COPYRIGHT), siteName);
 
 		Document.OutputSettings outputSettings = document.outputSettings();
@@ -94,7 +76,7 @@ public class PageRecord {
 		writer.append(document.outerHtml());
 	}
 
-	private void addHead(@NonNull Map<String, Object> cache) {
+	private void addHead() {
 		Element head = document.head();
 
 		head.appendElement("meta").attr("charset", "UTF-8");
@@ -150,16 +132,12 @@ public class PageRecord {
 		body.appendChild(indexedPage.getArticle());
 
 		addDateAndCopyright(copyRight);
-		if (footer.children().size() != 0) {
+		if (!footer.children().isEmpty()) {
 			body.appendChild(footer);
 		}
 	}
 
 	private String generateTitleTrail() {
-		return generateTitleTrail(true);
-	}
-
-	private String generateTitleTrail(boolean showTopmost) {
 		return indexedPage.getTitle();
 	}
 //
@@ -188,37 +166,36 @@ public class PageRecord {
 //					"class", createClasses(
 //							baseClass, "separator", false, isLast, false));
 //		}
+
+//	private String createClasses(String baseClass, String subClass, boolean isFirst, boolean isLast, boolean isSelf) {
+//		StringBuilder classes = new StringBuilder();
+//
+//		classes.append(baseClass).append(" ").append(subClass).append(" ").append(baseClass).append("-").append(subClass);
+//		if (isFirst) {
+//			addPositionClasses(classes, baseClass, subClass, "first");
+//		}
+//		if (isLast) {
+//			addPositionClasses(classes, baseClass, subClass, "last");
+//		}
+//		if (!isFirst && !isLast) {
+//			addPositionClasses(classes, baseClass, subClass, "inner");
+//		}
+//		if (isSelf) {
+//			addPositionClasses(classes, baseClass, subClass, "self");
+//		}
+//		return classes.toString();
 //	}
 
-	private String createClasses(String baseClass, String subClass, boolean isFirst, boolean isLast, boolean isSelf) {
-		StringBuilder classes = new StringBuilder();
+//	private StringBuilder addPositionClasses(StringBuilder classes, String baseClass, String subClass, String position) {
+//		return classes
+//				.append(" ").append(baseClass).append("-").append(position)
+//				.append(" ").append(subClass).append("-").append(position)
+//				.append(" ").append(baseClass).append("-").append(subClass).append("-").append(position);
+//	}
 
-		classes.append(baseClass).append(" ").append(subClass).append(" ").append(baseClass).append("-").append(subClass);
-		if (isFirst) {
-			addPositionClasses(classes, baseClass, subClass, "first");
-		}
-		if (isLast) {
-			addPositionClasses(classes, baseClass, subClass, "last");
-		}
-		if (!isFirst && !isLast) {
-			addPositionClasses(classes, baseClass, subClass, "inner");
-		}
-		if (isSelf) {
-			addPositionClasses(classes, baseClass, subClass, "self");
-		}
-		return classes.toString();
-	}
-
-	private StringBuilder addPositionClasses(StringBuilder classes, String baseClass, String subClass, String position) {
-		return classes
-				.append(" ").append(baseClass).append("-").append(position)
-				.append(" ").append(subClass).append("-").append(position)
-				.append(" ").append(baseClass).append("-").append(subClass).append("-").append(position);
-	}
-
-	public Element appendReferences() {
+	public void appendReferences() {
 		if (indexedPage.getNoteById().isEmpty()) {
-			return null;
+			return;
 		}
 		Element referenceList = footer.appendElement("div")
 				.attr("class", "reference references")
@@ -241,7 +218,6 @@ public class PageRecord {
 			node.attr("class", "reference reference-item-content-link");
 			content.appendChild(node);
 		}
-		return referenceList;
 	}
 
 	private void addDateAndCopyright(String copyRight) {
@@ -282,12 +258,12 @@ public class PageRecord {
 		}
 		List<PageRecord> orderedChildren = new ArrayList<>();
 		PageRecord self = this;
-		sortedPages.forEach((p) -> {
-			List<Node> s = p.ensureSummary();
+//		sortedPages.forEach((p) -> {
+//			List<Node> s = p.ensureSummary();
 //			if (p.isChildOf(self) && orderedChildren.size() < 10 && s != null && !s.isEmpty()) {
 //				orderedChildren.add(p);
 //			}
-		});
+//		});
 		if (orderedChildren.isEmpty()) {
 			return;
 		}
@@ -422,26 +398,6 @@ public class PageRecord {
 		} catch (RuntimeException e) {
 			return null;
 		}
-	}
-
-	public String getId() {
-		return indexedPage.getPageLink().toString();
-	}
-
-	public String getTitle() {
-		return indexedPage.getTitle();
-	}
-
-	public DateTime getTimePublished() {
-		return indexedPage.getTimePublished();
-	}
-
-	public DateTime getTimeModified() {
-		return indexedPage.getTimeModified();
-	}
-
-	public boolean isIndex() {
-		return indexedPage.isIndex();
 	}
 
 	private class LocalToRelativeLinkVisitor implements NodeVisitor {
