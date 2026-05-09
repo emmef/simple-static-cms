@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NonNull;
 
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -63,7 +64,7 @@ public class PathResolver {
 		if (href == null || href.isBlank()) {
 			return null;
 		}
-		String trimmedHref = href.trim();
+		String trimmedHref = URLDecoder.decode(href.trim(), StandardCharsets.UTF_8);
 		if (trimmedHref.startsWith(LOCAL_LINK.toString())) {
 			String trimmedLocalId = trimmedHref.substring(1).trim();
 			if (trimmedLocalId.isBlank()) {

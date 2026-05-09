@@ -1,6 +1,5 @@
 package org.emmef.cms.main;
 
-import com.google.common.collect.ImmutableList;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.emmef.cms.page.*;
@@ -14,7 +13,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.nio.file.Files.isDirectory;
 
@@ -22,31 +21,27 @@ import static java.nio.file.Files.isDirectory;
 public class Pages {
 	private static final Pattern HTML_PATTERN = Pattern.compile("\\.html?$", Pattern.CASE_INSENSITIVE);
 	public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
-	public static final String TAG_SEPARATOR = "/";
 
-	public static Pages readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PathResolver uuidRelativeLinks) throws IOException {
+	public static void readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PathResolver uuidRelativeLinks) throws IOException {
 		List<IndexedPage> collectedPages = new ArrayList<>();
 		List<Path> toCopy = new ArrayList<>();
 		collectPages(source, collectedPages, toCopy, 3, uuidRelativeLinks);
-		Optional<IndexedPage> rootPage = collectedPages.stream().filter(p -> p.isRoot()).findFirst();
-		String siteName = rootPage.isPresent() ? rootPage.get().getTitle() : "Home";
+		Optional<IndexedPage> rootPage = collectedPages.stream().filter(PathInfo::isRoot).findFirst();
+		String siteName = rootPage.map(IndexedPage::getTitle).orElse("Home");
 
-		List<PageRecord> pageRecords = collectedPages.stream().map(ip -> {
-			return new PageRecord(ip);
-		}).collect(Collectors.toUnmodifiableList());
+		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).toList();
 
 		replaceLastArticlesReferences(pageRecords, pageRecords);
 		appendReferences(pageRecords);
 		replacePageReferences(collectedPages);
 
-		Set<Path> collectedNames = new TreeSet<Path>();
+		Set<Path> collectedNames = new TreeSet<>();
 		Map<String, Object> cache = new HashMap<>();
 
 		cache.put(PageRecord.PAGE_COPYRIGHT, copyRight);
 
-		pageRecords.forEach((page) -> {
-			generatePageOutput(target, page, collectedNames, cache, siteName);
-		});
+		pageRecords.forEach(page ->
+				generatePageOutput(page, collectedNames, cache, siteName));
 
 		toCopy.forEach(file -> {
 			Path relativeSource = source.relativize(file);
@@ -59,15 +54,13 @@ public class Pages {
 				Files.copy(file, destination, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
 				Files.setPosixFilePermissions(destination, ATTRIBUTES);
 			} catch (IOException e) {
-				e.printStackTrace();
+				log.error("Error copying page {} to {}", file, destination, e);
 			}
 		});
-
-		return null;
 	}
 
-	private static void generatePageOutput(@NonNull Path target, @NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache, String siteName) {
-		Path dynamicPath = page.getIndexedPage().getPathResolver().toTargetPath(page.getIndexedPage().getId());
+	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache, String siteName) {
+		Path dynamicPath = page.getIndexedPage().getResolver().toTargetPath(page.getIndexedPage().getPageLink());
 		if (!collectedNames.contains(dynamicPath)) {
 			ensureDirectory(dynamicPath);
 			try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
@@ -76,7 +69,7 @@ public class Pages {
 				page.writePage(output, cache, siteName);
 				collectedNames.add(dynamicPath);
 			} catch (IOException e) {
-				e.printStackTrace();
+				log.error("Error writing page {} to file {}", page, page.getIndexedPage(), e);
 			}
 		} else {
 			log.error("NOT writing page \"{}\" [{}] with already existing title", page.getTitle(), page.getId());
@@ -96,34 +89,20 @@ public class Pages {
 		}
 	}
 
-	private static List<IndexedPage> createOrderedPages(Collection<IndexedPage> pages) {
-		long mostRecentCreated = 0;
-		long mostRecentModified = 0;
-		List<IndexedPage> result = new ArrayList<>();
-		for (IndexedPage page : pages) {
-			mostRecentCreated = Math.max(page.getTimePublished().getMillis(), mostRecentCreated);
-			mostRecentModified = Math.max(page.getTimeModified().getMillis(), mostRecentModified);
-			result.add(page);
-		}
-		Comparator<IndexedPage> comparator = IndexedPage.createDateComparator();
-		Collections.sort(result, comparator);
-		return ImmutableList.copyOf(result);
-	}
-
-	private static @NonNull Set<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PathResolver pathResolver, List<Path> toCopy, int levels) {
+	private static @NonNull Collection<PathInfo> collectPathInfos(@NonNull Path source, @NonNull PathResolver pathResolver, List<Path> toCopy, int levels) {
 		List<Directory> subDirectories = new ArrayList<>();
 		Path realSource = PathUtil.realAndNormalized(source);
 		subDirectories.add(new Directory(realSource, 1));
 		Set<PathInfo> result = new HashSet<>();
 		String tagsPath = source.resolve("tags").toString();
-		Set<Path> collected = new HashSet<>();
+		Set<Path> collected = new LinkedHashSet<>();
 
 		try {
 			while (!subDirectories.isEmpty()) {
-				Directory directory = subDirectories.get(0);
+				Directory directory = subDirectories.getFirst();
 				log.info("Scanning directory {}.", directory);
-				Files.list(directory.directory).forEach((listedFile) -> {
-					PathUtil.withRealAndNormalized(listedFile, file -> {
+				try (Stream<Path> list = Files.list(directory.directory)) {
+					list.forEach(listedFile -> PathUtil.withRealAndNormalized(listedFile, file -> {
 						boolean ignore;
 						boolean isDirectory = file.toFile().isDirectory();
 						if ("_".equals(file.getFileName().toString().substring(0, 1))) {
@@ -131,8 +110,7 @@ public class Pages {
 						} else if (isDirectory) {
 							String name = file.toString();
 							ignore = name.equals(tagsPath);
-						}
-						else {
+						} else {
 							ignore = false;
 						}
 						if (ignore) {
@@ -146,22 +124,20 @@ public class Pages {
 
 							if (HTML_PATTERN.matcher(name).find()) {
 								if (!collected.contains(file)) {
-									result.add(new DefaultPathInfo(pathResolver, file.normalize()));
+									result.add(new PathInfo(pathResolver, file.normalize()));
 									collected.add(file);
-								}
-								else {
-									log.warn("Ignoring file \"{}\" as it is a duplicate.", file.toString());
+								} else {
+									log.warn("Ignoring file \"{}\" as it is a duplicate.", file);
 								}
 							} else {
 								toCopy.add(file);
 							}
 						}
 
-					}, (t, p) -> {
-						log.error("Was not able to resolve \"{}\": {}", t, p);
-					});
-				});
-				subDirectories.remove(0);
+					},
+							(t, p) -> log.error("Was not able to resolve \"{}\": {}", t, p)));
+					subDirectories.removeFirst();
+				}
 			}
 		} catch (
 				IOException e) {
@@ -169,18 +145,15 @@ public class Pages {
 
 					RuntimeException(e);
 		}
-		return Collections.unmodifiableSet(result);
+		return result;
 	}
 
 	private static void collectPages(@NonNull Path rootPath, List<IndexedPage> collectedPages, List<Path> toCopy, int levels, @NonNull PathResolver pathResolver) throws IOException {
-		Set<PathInfo> infos = collectPathInfos(rootPath, pathResolver, toCopy, levels);
-		for (PathInfo info : infos) {
+		for (PathInfo info : collectPathInfos(rootPath, pathResolver, toCopy, levels)) {
 			try {
-				collectedPages.add(readFile(info, pathResolver));
+				collectedPages.add(readFile(info));
 			} catch (PageException e) {
-				log.error("Not a valid source file: " + info.getId(), e);
-			} catch (Exception e) {
-				e.printStackTrace();
+				log.error("Not a valid source file: {}", info.getPageLink(), e);
 			}
 		}
 	}
@@ -190,20 +163,21 @@ public class Pages {
 	}
 
 	private static void appendReferences(List<PageRecord> collectedPages) {
-		collectedPages.forEach((page) -> page.appendReferences());
+		collectedPages.forEach(PageRecord::appendReferences);
 	}
 
 	private static void replaceLastArticlesReferences(Collection<PageRecord> pages, List<PageRecord> sortedPages) {
 		pages.forEach((page) -> page.replaceLastArticlesReference(sortedPages));
 	}
 
-	private static IndexedPage readFile(PathInfo pageInfo, @NonNull PathResolver pathResolver) throws IOException {
+	private static IndexedPage readFile(PathInfo pageInfo) throws IOException {
 		try (InputStream fileStream = new FileInputStream(pageInfo.getSourcePath().toFile())) {
 			Document document = Jsoup.parse(fileStream, "UTF-8", "");
 
-			return new IndexedPage(document, pathResolver, pageInfo.getSourcePath());
+			return new IndexedPage(document, pageInfo);
 		}
 	}
 
-	private record Directory(@NonNull Path directory, int level) {}
+	private record Directory(@NonNull Path directory, int level) {
+	}
 }

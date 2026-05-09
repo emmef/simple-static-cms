@@ -24,7 +24,7 @@ import static org.emmef.cms.page.DocumentUtils.*;
  * The replacement of links will happen at the last possible moment on all pages.
  */
 @Slf4j
-public class IndexedPage extends DefaultPathInfo {
+public class IndexedPage extends PathInfo {
 	public static final String META_MATH = "scms-uses-math";
 	public static final String META_PUBLISH_DATE = "scms-published-date";
 	public static final String META_REPUBLISH_DATE = "scms-republish-date";
@@ -41,12 +41,10 @@ public class IndexedPage extends DefaultPathInfo {
 			if (comparePublished != 0) {
 				return comparePublished;
 			}
-			return p1.getId().compareTo(p2.getId());
+			return p1.getPageLink().compareTo(p2.getPageLink());
 		};
 	}
 
-	@Getter
-	private final PathResolver pathResolver;
 	@Getter
 	private final @NonNull String title;
 	@Getter
@@ -70,12 +68,12 @@ public class IndexedPage extends DefaultPathInfo {
 	@Getter
 	private final Document document;
 
-	public IndexedPage(Document document, @NonNull PathResolver pathResolver, Path file) {
-		super(pathResolver, file);
-		this.pathResolver = pathResolver;
+	public IndexedPage(Document document, @NonNull PathInfo info) {
+		super(info);
 		@NonNull Element sourceHtml = getHtmlElement(document);
 		Node head = getNodeByTag(sourceHtml, "head", NodeExpectation.UNIQUE);
 		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, META_MATH, "tex support", Function.identity()));
+		Path file = getSourcePath();
 		this.timePublished = PageUtils.getTime(head, META_PUBLISH_DATE, Collections.singletonList(FileTimeStamps.createdSupplier(file)));
 		this.timeModified = PageUtils.getTime(head, META_REPUBLISH_DATE, Arrays.asList(() -> this.timePublished, FileTimeStamps.modifiedSupplier(file)));
 		this.article = PageUtils.getArticle(sourceHtml);
@@ -84,7 +82,7 @@ public class IndexedPage extends DefaultPathInfo {
 		this.summaryInListing = summary.clone();
 		this.document = htmlDeclarationFromElement(sourceHtml);
 		this.captionById = PageUtils.createCaptionById(article);
-		FootNoteScanner footNoteScanner = new FootNoteScanner(pathResolver, getId());
+		FootNoteScanner footNoteScanner = new FootNoteScanner(getResolver(), getPageLink());
 		this.noteById = footNoteScanner.scanForNotes(sourceHtml, article);
 		footNoteScanner.removeManagedNotes(article);
 		this.latestArticles = searchForLatestArticles(article);
@@ -111,15 +109,15 @@ public class IndexedPage extends DefaultPathInfo {
 	}
 
 	public void replacePageReferences(@NonNull Element element, @NonNull List<IndexedPage> pages, boolean globalize) {
-		PageUtils.scanForManagedAnchors(pathResolver, element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
+		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
 	}
 
 	private Optional<PageResult> findPage(@NonNull List<IndexedPage> pages, PathResolver.PageLink pageLink, boolean globalize) {
-		if (getId().isSamePage(pageLink)) {
+		if (getPageLink().isSamePage(pageLink)) {
 			return findInPage(pageLink, globalize);
 		}
 		for (IndexedPage page : pages) {
-			if (page.getId().isSamePage(pageLink)) {
+			if (page.getPageLink().isSamePage(pageLink)) {
 				return page.findInPage(pageLink, true);
 			}
 		}
@@ -127,11 +125,11 @@ public class IndexedPage extends DefaultPathInfo {
 	}
 
 	private Optional<PageResult> findInPage(PathResolver.PageLink pageLink, boolean globalize) {
-		PathResolver.PageLink globalized = getId().globalize(pageLink);
-		PathResolver.PageLink transformed = globalize ? globalized : getId().localize(pageLink);
+		PathResolver.PageLink globalized = getPageLink().globalize(pageLink);
+		PathResolver.PageLink transformed = globalize ? globalized : getPageLink().localize(pageLink);
 		if (pageLink.isPage()) {
 			return Optional.of(new PageResult(globalized, (anchor) -> {
-				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : pathResolver.toTargetHref(transformed));
+				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
 				if (anchor.text().isBlank()) {
 					anchor.children().remove();
 					anchor.text(title);
@@ -140,7 +138,7 @@ public class IndexedPage extends DefaultPathInfo {
 		}
 		if (captionById.containsKey(pageLink.getLocalId())) {
 			return Optional.of(new PageResult(globalized, (anchor) -> {
-				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : pathResolver.toTargetHref(transformed));
+				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
 				Element element = captionById.get(pageLink.getLocalId());
 				if (anchor.text().isBlank()) {
 					anchor.children().remove();
@@ -151,7 +149,7 @@ public class IndexedPage extends DefaultPathInfo {
 		}
 		if (noteById.containsKey(pageLink.getLocalId())) {
 			return Optional.of(new PageResult(globalized, (anchor) -> {
-				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : pathResolver.toTargetHref(transformed));
+				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
 				if (anchor.text().isBlank()) {
 					FootNoteScanner.Note note = noteById.get(pageLink.getLocalId());
 					anchor.children().remove();
