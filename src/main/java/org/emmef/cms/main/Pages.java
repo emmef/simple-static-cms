@@ -37,10 +37,10 @@ public class Pages {
 		SortedSet<PageLink> tags = createTags(collectedPages);
 		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).toList();
 
-		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords));
 		pageRecords.forEach(PageRecord::appendReferences);
 		collectedPages.forEach((page1) -> page1.replacePageReferences(collectedPages));
-		collectedPages.forEach(page -> page.generateMainTagList(tags, collectedPages));
+		collectedPages.forEach(page -> page.generateMainTagList(tags));
+		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords));
 
 		Set<Path> collectedNames = new TreeSet<>();
 		Map<String, Object> cache = new HashMap<>();
@@ -48,7 +48,7 @@ public class Pages {
 		cache.put(PageRecord.PAGE_COPYRIGHT, copyRight);
 
 		pageRecords.forEach(page ->
-				generatePageOutput(page, collectedNames, cache, siteName));
+				generatePageOutput(page, collectedNames, cache, siteName, collectedPages));
 
 		toCopy.forEach(file -> {
 			Path relativeSource = source.relativize(file);
@@ -66,14 +66,14 @@ public class Pages {
 		});
 	}
 
-	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache, String siteName) {
+	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache, String siteName, List<IndexedPage> collectedPages) {
 		Path dynamicPath = page.getIndexedPage().getResolver().toTargetPath(page.getIndexedPage().getPageLink());
 		if (!collectedNames.contains(dynamicPath)) {
 			ensureDirectory(dynamicPath);
 			try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
 				log.info("Wrote {} to file {}.", page, dynamicPath);
 
-				page.writePage(output, cache, siteName);
+				page.writePage(output, cache, siteName, collectedPages);
 				collectedNames.add(dynamicPath);
 			} catch (IOException e) {
 				log.error("Error writing page {} to file {}", page, page.getIndexedPage(), e);
@@ -172,7 +172,7 @@ public class Pages {
 		collectedPages.stream()
 				.filter(IndexedPage::isIndex)
 				.forEach(indexedPage -> tags.add(indexedPage.getPageLink()));
-
+		log.info("Existing tags: {}",  tags);
 		return Collections.unmodifiableSortedSet(tags);
 	}
 

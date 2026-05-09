@@ -3,19 +3,18 @@ package org.emmef.cms.page;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.emmef.cms.util.NodeHelper;
+import org.emmef.cms.page.resolving.PageLink;
 import org.joda.time.DateTime;
 import org.jsoup.nodes.DataNode;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
-import org.jsoup.select.NodeVisitor;
 
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * TODO A page will contain tags in link tags in the header
@@ -43,7 +42,6 @@ public class PageRecord {
 	private final @NonNull IndexedPage indexedPage;
 	@NonNull
 	private final Document document;
-	private List<Node> summary;
 	@NonNull
 	private final Element footer;
 
@@ -66,9 +64,9 @@ public class PageRecord {
 		return indexedPage.getResolver().toTargetHref(indexedPage.getPageLink());
 	}
 
-	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName) throws IOException {
+	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName, @NonNull SequencedCollection<IndexedPage> pages) throws IOException {
 		addHead();
-		addBody((String) cache.get(PAGE_COPYRIGHT), siteName);
+		addBody((String) cache.get(PAGE_COPYRIGHT), siteName, pages);
 
 		Document.OutputSettings outputSettings = document.outputSettings();
 		outputSettings.charset(StandardCharsets.UTF_8);
@@ -108,13 +106,11 @@ public class PageRecord {
 		head.appendElement("title").text(generateTitleTrail());
 	}
 
-	private void addBody(String copyRight, String siteName) {
+	private void addBody(String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages) {
 		Element body = document.body();
 		body.attr("onload", "EmmefUtil.init();");
 		body.appendChild(header);
 		Element nav = header.appendElement("nav");
-
-
 
 		nav.appendElement("div")
 				.attr("class", "article-title")
@@ -124,9 +120,10 @@ public class PageRecord {
 		Element tags = nav.appendElement("div").attr("class", "tag-navigation");
 
 		// Add main tag navigation
-		getIndexedPage().getMainTagList().forEach(anchor -> {
+		List<PageLink> mainTagList = getIndexedPage().getMainTagList();
+		mainTagList.forEach(anchor -> {
 			tags.appendElement("span").classNames(Collections.singleton("main-tag-navigation-before"));
-			tags.appendChild(anchor);
+			addTagElement(tags, anchor, pages);
 			tags.appendElement("span").classNames(Collections.singleton("main-tag-navigation-after"));
 		});
 
@@ -143,61 +140,30 @@ public class PageRecord {
 		}
 	}
 
+	private void addTagElement(@NonNull Element parent, @NonNull PageLink anchor, @NonNull SequencedCollection<IndexedPage> pages) {
+		pages.stream().filter(p -> p.getPageLink().equals(anchor)).findFirst().ifPresent(page -> {
+			Element element = parent.appendElement("a");
+			element.attr("href", indexedPage.getResolver().toTargetHref(anchor));
+			element.html(nonBreakingText(page.getTitle()));
+		});
+	}
+
+	private static @NonNull String nonBreakingText(@NonNull String text) {
+		StringBuilder result = new StringBuilder();
+		for (String part : text.split("\\p{Space}")) {
+			if (!part.isBlank()) {
+				if (!result.isEmpty()) {
+					result.append("&nbsp;");
+				}
+				result.append(part);
+			}
+		}
+		return result.toString();
+	}
+
 	private String generateTitleTrail() {
 		return indexedPage.getTitle();
 	}
-//
-//	private void writeLinks(PageRecord self, Element nav, List<PageRecord> pages, String baseClass) {
-//		int size = pages.size();
-//		if (size == 0) {
-//			return;
-//		}
-//		for (int i = 0; i < size; i++) {
-//			PageRecord page = pages.get(i);
-//			boolean isFirst = i == 0;
-//			boolean isLast = i == size - 1;
-//			boolean isSelf = self != null && PageRecord.COMPARE_BY_NAME.compare(page, self) == 0;
-//
-//			if (isFirst) {
-//				nav.appendElement("span").attr(
-//						"class", createClasses(
-//								baseClass, "separator", true, false, false));
-//			}
-//			nav.appendElement("a")
-//					.attr("href", page.getDynamicFilename())
-//					.attr("class", createClasses(baseClass, "element", isFirst, isLast, isSelf))
-//					.text(page.getIndexedPage().getTitle());
-//
-//			nav.appendElement("span").attr(
-//					"class", createClasses(
-//							baseClass, "separator", false, isLast, false));
-//		}
-
-//	private String createClasses(String baseClass, String subClass, boolean isFirst, boolean isLast, boolean isSelf) {
-//		StringBuilder classes = new StringBuilder();
-//
-//		classes.append(baseClass).append(" ").append(subClass).append(" ").append(baseClass).append("-").append(subClass);
-//		if (isFirst) {
-//			addPositionClasses(classes, baseClass, subClass, "first");
-//		}
-//		if (isLast) {
-//			addPositionClasses(classes, baseClass, subClass, "last");
-//		}
-//		if (!isFirst && !isLast) {
-//			addPositionClasses(classes, baseClass, subClass, "inner");
-//		}
-//		if (isSelf) {
-//			addPositionClasses(classes, baseClass, subClass, "self");
-//		}
-//		return classes.toString();
-//	}
-
-//	private StringBuilder addPositionClasses(StringBuilder classes, String baseClass, String subClass, String position) {
-//		return classes
-//				.append(" ").append(baseClass).append("-").append(position)
-//				.append(" ").append(subClass).append("-").append(position)
-//				.append(" ").append(baseClass).append("-").append(subClass).append("-").append(position);
-//	}
 
 	public void appendReferences() {
 		if (indexedPage.getNoteById().isEmpty()) {
@@ -257,104 +223,71 @@ public class PageRecord {
 		return DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified1.getMillis()).toZonedDateTime());
 	}
 
-	public void replaceLastArticlesReference(List<PageRecord> sortedPages) {
+	public void replaceLastArticlesReference(@NonNull List<PageRecord> sortedPages) {
 		Element latestArticlesElement = indexedPage.getLatestArticles();
 		if (latestArticlesElement == null) {
 			return;
 		}
-		List<PageRecord> orderedChildren = new ArrayList<>();
-		PageRecord self = this;
-//		sortedPages.forEach((p) -> {
-//			List<Node> s = p.ensureSummary();
-//			if (p.isChildOf(self) && orderedChildren.size() < 10 && s != null && !s.isEmpty()) {
-//				orderedChildren.add(p);
-//			}
-//		});
-		if (orderedChildren.isEmpty()) {
+		if (!indexedPage.isIndex()) {
+			// No indices for non-index pages; remove the element
+			latestArticlesElement.remove();
+			return;
+		}
+
+		var matchingPages = getMatchingPages(sortedPages);
+
+		if (matchingPages.isEmpty()) {
 			return;
 		}
 		latestArticlesElement.tagName("div");
 		latestArticlesElement.attr("class", "latest-articles");
-		orderedChildren.forEach((page) -> addArticle(latestArticlesElement, page));
+		AtomicInteger counter = new AtomicInteger(0);
+		matchingPages.forEach((page) -> addArticle(latestArticlesElement, page, counter.incrementAndGet()));
 	}
 
-	private void addArticle(Element articleList, PageRecord page) {
-//		List<Node> s = page.ensureSummary();
-//		if (s == null) {
-//			return;
-//		}
-//		Element item = articleList.appendElement("div");
-//		if (articleList.children().size() == 1) {
-//			item.attr("class", "latest-articles-item latest-articles-item-first");
-//		} else {
-//			item.attr("class", "latest-articles-item latest-articles-item-subsequent");
-//		}
-//		String categoryLink = page.parent != null ? page.parent.getDynamicFilename() : null;
-//		Element categoryDiv = item
-//				.appendElement("div")
-//				.attr("class", "latest-article-category");
-//		if (categoryLink != null) {
-//			categoryDiv.appendElement("a")
-//					.attr("href", categoryLink)
-//					.attr("class", "latest-article-category")
-//					.text(page.parentTitle(false));
-//		} else {
-//			categoryDiv.text(page.parentTitle(false));
-//		}
-//
-//
-//		item
-//				.appendElement("div").attr("class", "latest-article-date")
-//				.appendElement("span").attr("class", "milliseconds-age")
-//				.text(Long.toString(indexedPage.getTimeModified().getMillis()));
-//
-//		item
-//				.appendElement("div")
-//				.attr("class", "latest-article-title")
-//				.appendElement("a")
-//				.attr("class", "latest-article-link")
-//				.attr("href", page.getDynamicFilename())
-//				.text(page.getIndexedPage().getTitle());
-//
-////        Element summaryAndDate = item.appendElement("div").attr("class", "latest-article-content");
-//
-//		Element summary = item
-//				.appendElement("div").attr("class", "latest-article-summary");
-//		for (Node n : s) {
-//			summary.appendChild(n.clone());
-//		}
-//
+	private @NonNull ArrayList<IndexedPage> getMatchingPages(@NonNull List<PageRecord> sortedPages) {
+		var matchingPages = new ArrayList<IndexedPage>();
+		sortedPages.forEach(p -> {
+			List<PageLink> mainTagList = p.getIndexedPage().getMainTagList();
+			if (mainTagList.isEmpty()) {
+				return;
+			}
+			PageLink pageLink = mainTagList.getLast();
+			if (indexedPage.getPageLink().equals(pageLink)) {
+				matchingPages.add(p.getIndexedPage());
+			}
+		});
+		return matchingPages;
 	}
 
-	public List<Node> ensureSummary() {
-		if (summary != null) {
-			return summary;
+	private void addArticle(Element articleList, IndexedPage page, int itemNumber) {
+		Element item = articleList.appendElement("div");
+		if (itemNumber == 1) {
+			item.attr("class", "latest-articles-item latest-articles-item-first");
+		} else {
+			item.attr("class", "latest-articles-item latest-articles-item-subsequent");
 		}
-		summary = summarizeText();
-		return summary;
-	}
 
-	private List<Node> summarizeText() {
-		Element p = NodeHelper.deepGetFirst(indexedPage.getArticle(),
-				Element.class, e -> {
-					if (e == null) {
-						return false;
-					}
-					if (!SUMMARY_ELEMENT.equalsIgnoreCase(e.tagName())) {
-						return false;
-					}
-					String id = e.attr("id");
-					return SUMMARY_ID.equalsIgnoreCase(id);
-				});
-		if (p == null) {
-			return null;
-		}
-		LocalToRelativeLinkVisitor visitor = new LocalToRelativeLinkVisitor();
-		ArrayList<Node> summary = new ArrayList<>();
-		for (Node child : p.childNodes()) {
-			summary.add(child.clone().traverse(visitor));
-		}
-		return summary.isEmpty() ? Collections.emptyList() : summary;
+		item
+				.appendElement("div").attr("class", "latest-article-date")
+				.appendElement("span").attr("class", "milliseconds-age")
+				.text(Long.toString(page.getTimeModified().getMillis()));
+
+		item
+				.appendElement("div")
+				.attr("class", "latest-article-title")
+				.appendElement("a")
+				.attr("class", "latest-article-link")
+				.attr("href", page.getResolver().toTargetHref(page.getPageLink()))
+				.text(page.getTitle());
+
+
+		Element summary = item
+				.appendElement("div").attr("class", "latest-article-content");
+
+		Element summaryInListing = page.getSummaryInListing();
+		summaryInListing.removeAttr("id");
+		summary.appendChild(summaryInListing.clone());
 	}
 
 	private int getGMTYear(long millis) {
@@ -366,67 +299,5 @@ public class PageRecord {
 		GregorianCalendar calendar = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
 		calendar.setTimeInMillis(millis);
 		return calendar;
-	}
-
-
-	private void appendNormalized(@NonNull StringBuilder output, @NonNull String name) {
-		name.chars().forEach(c -> {
-			char chr = (char) c;
-			if (chr <= ' ' || chr >= '\u007f' || reservedChars.indexOf(c) != -1) {
-				output.append('_');
-			} else if (chr >= 'A' && chr <= 'Z') {
-				output.append('_').append((char) Character.toLowerCase(c));
-			} else {
-				output.append(chr);
-			}
-		});
-	}
-
-	private static UUID getPageRefId(Node pageRef, String scheme) {
-		String refIdText = getReferenceValue(pageRef, scheme);
-		UUID refId;
-		try {
-			refId = UUID.fromString(refIdText);
-		} catch (IllegalArgumentException e) {
-			throw new PageException("A href with scheme " + scheme + " requires a uuid");
-		}
-		return refId;
-	}
-
-	private static String getReferenceValue(Node pageRef, String scheme) {
-		String href = pageRef.attr("href");
-		return href.substring(scheme.length());
-	}
-
-	private static UUID getUuidorNull(String reference) {
-		try {
-			return UUID.fromString(reference);
-		} catch (RuntimeException e) {
-			return null;
-		}
-	}
-
-	private class LocalToRelativeLinkVisitor implements NodeVisitor {
-		@Override
-		public void head(Node node, int depth) {
-
-		}
-
-		@Override
-		public void tail(Node node, int depth) {
-			if (!(node instanceof Element)) {
-				return;
-			}
-			Element e = (Element) node;
-			if (!"a".equalsIgnoreCase(e.tagName())) {
-				return;
-			}
-			String href = e.attr("href");
-			if (href == null || !href.startsWith("#")) {
-				return;
-			}
-			String newHref = getAbsoluteUrl() + href;
-			e.attr("href", newHref);
-		}
 	}
 }
