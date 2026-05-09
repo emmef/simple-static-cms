@@ -183,7 +183,7 @@ public class PageRecord {
 		if (indexedPage.getNoteById().isEmpty()) {
 			return;
 		}
-		Element referenceList = footer.appendElement("div")
+		Element referenceList = indexedPage.getArticle().appendElement("div")
 				.attr("class", "reference references")
 				.appendElement("table")
 				.attr("class", "reference reference-list")
@@ -253,9 +253,9 @@ public class PageRecord {
 					return tag.stripFile().startsWith(getIndexedPage().getPageLink().stripFile());
 				})
 				.filter(tag -> !tag.equals(getIndexedPage().getPageLink())).toList();
+		Element subTagList = latestArticlesElement.prependElement("div").attr("class", "sub-tag-list");
+		addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages, "sub-tag-before", "tag-selected", "sub-tag-after");
 		if (!subTags.isEmpty()) {
-			Element subTagList = latestArticlesElement.prependElement("div").attr("class", "sub-tag-list");
-			addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages, "sub-tag-before", "tag-selected", "sub-tag-after");
 			subTagList.appendElement("span").addClass("sub-tag-separator");
 			subTags.forEach(tag -> {
 				addTagLinkWithPadding(subTagList, tag, pages, "sub-tag-before", null, "sub-tag-after");
