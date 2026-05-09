@@ -114,21 +114,26 @@ public class PageRecord {
 		body.appendChild(header);
 		Element nav = header.appendElement("nav");
 
+
+
+		nav.appendElement("div")
+				.attr("class", "article-title")
+				.text(generateTitleTrail());
+
+
+		Element tags = nav.appendElement("div").attr("class", "tag-navigation");
+
+		// Add main tag navigation
+		getIndexedPage().getMainTagList().forEach(anchor -> {
+			tags.appendElement("span").classNames(Collections.singleton("main-tag-navigation-before"));
+			tags.appendChild(anchor);
+			tags.appendElement("span").classNames(Collections.singleton("main-tag-navigation-after"));
+		});
+
 		nav.appendElement("span")
 				.attr("onclick", "EmmefUtil.contrast()")
 				.attr("class", "contrast-setter")
 				.html("◩");
-		nav.appendElement("a")
-				.attr("class", "site-link")
-				.attr("href", "/")
-				.html(getIndexedPage().isRoot() ? "/" : siteName);
-
-		nav.appendElement("div").attr("class", "tag-navigation")
-				.appendElement("span").text("TAG1").appendElement("span").text("TAG2").appendElement("span").text("TAG3");
-		header.appendElement("div")
-				.attr("id", "article-title")
-				.text(generateTitleTrail());
-
 
 		body.appendChild(indexedPage.getArticle());
 

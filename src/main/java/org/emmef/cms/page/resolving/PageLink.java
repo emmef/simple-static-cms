@@ -3,12 +3,15 @@ package org.emmef.cms.page.resolving;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.SequencedSet;
-import java.util.TreeSet;
+import java.util.Comparator;
+import java.util.List;
 
-@EqualsAndHashCode(callSuper = false)
+@Slf4j
+@EqualsAndHashCode(callSuper = false, of = "link")
 public class PageLink implements Comparable<PageLink> {
 	public static final PageLink NONE = new PageLink(null, null);
 	public static final String INDEX_FILE = "index.html";
@@ -35,22 +38,24 @@ public class PageLink implements Comparable<PageLink> {
 		return false;
 	}
 
-	public SequencedSet<PageLink> createTagHierarchy() {
-		var result = new TreeSet<PageLink>();
-
-		if (isIndex()) {
-			result.add(this);
-		}
+	public List<PageLink> createTagHierarchy() {
+		var result = new ArrayList<PageLink>();
+		result.add(PageLink.of(ROOT_INDEX_FILE,null));
 		var link = getLink();
 		StringBuilder path = new StringBuilder();
+
 		for (String part : link.split(PathResolver.URL_PATH_SEPARATOR)) {
 			if (!part.isBlank()) {
 				path.append(PathResolver.URL_PATH_SEPARATOR).append(part);
 				result.add(PageLink.of(path.toString() + ROOT_INDEX_FILE, null));
 			}
 		}
+		if (isIndex() && !result.contains(this)) {
+			log.warn("Index \"{}\" not in its own hierarchy.", link);
+		}
+		result.sort(Comparator.comparingInt(o -> o.link.length()));
 
-		return Collections.unmodifiableSequencedSet(result);
+		return Collections.unmodifiableList(result);
 	}
 
 	@Override
