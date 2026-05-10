@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.emmef.cms.page.DocumentUtils.NOTE_ELEMENT;
+import static org.emmef.cms.document.Elements.FOOTNOTE;
 
 @Data
 class FootNoteScanner {
@@ -38,7 +38,7 @@ class FootNoteScanner {
 	}
 
 	public void removeManagedNotes(@NonNull Element root) {
-		root.getElementsByTag(NOTE_ELEMENT).forEach(note -> {
+		root.getElementsByTag(FOOTNOTE).forEach(note -> {
 			String id = note.attr("id");
 			if (id.isBlank()) {
 				return;
@@ -49,7 +49,7 @@ class FootNoteScanner {
 
 	private static @NonNull Map<String, Element> findAllNotesById(Element sourceDocument) {
 		var notes = new HashMap<String, Element>();
-		sourceDocument.getElementsByTag(NOTE_ELEMENT).forEach(note -> {
+		sourceDocument.getElementsByTag(FOOTNOTE).forEach(note -> {
 			String id = note.attr("id");
 			if (id.isBlank()) {
 				return;

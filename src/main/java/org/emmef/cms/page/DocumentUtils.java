@@ -18,8 +18,6 @@ import java.util.regex.Pattern;
 public class DocumentUtils {
 	public static final Predicate<Element> TITLE = NodeHelper.elementByNameCaseInsensitive("title");
 	public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
-	public static final String NOTE_ELEMENT = "aside";
-	public static final String ANCHOR_ELEMENT = "a";
 	public static final String ANCHOR_HREF = "href";
 	public static final String META_TAG = "meta";
 	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive(META_TAG);
