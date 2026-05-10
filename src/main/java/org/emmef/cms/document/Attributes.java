@@ -1,6 +1,7 @@
 package org.emmef.cms.document;
 
 public class Attributes {
+	public static final String ANCHOR_TITLE = "title";
 	public static final String HREF = "href";
 
 	public static final String HTML_LANGUAGE = "lang";
