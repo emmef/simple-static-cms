@@ -22,6 +22,7 @@ public class PageLink implements Comparable<PageLink> {
 	private final String localId;
 	@Getter
 	private final String link;
+	private final String strippedOfFile;
 
 	public boolean isRoot() {
 		return !isLocal() && ROOT_INDEX_FILE.equals(getPage());
@@ -111,12 +112,15 @@ public class PageLink implements Comparable<PageLink> {
 		if (isLocal()) {
 			throw new IllegalArgumentException("Cannot strip file from a local page link: " + this);
 		}
-		int index = link.lastIndexOf(PathResolver.URL_PATH_SEPARATOR);
-		return (index >= 0) ? link.substring(0, index) : "";
+		return strippedOfFile;
 	}
 
 	@Override
 	public int compareTo(@NonNull PageLink o) {
+		int compareStripped = strippedOfFile.compareTo(o.strippedOfFile);
+		if (compareStripped != 0) {
+			return compareStripped;
+		}
 		return link.compareTo(o.link);
 	}
 
@@ -133,6 +137,7 @@ public class PageLink implements Comparable<PageLink> {
 	PageLink(String page, String localId) {
 		this.page = page != null ? page.trim() : null;
 		this.localId = localId != null ? localId.trim() : null;
+		this.strippedOfFile = stripFile(this.page);
 		if (this.page == null) {
 			if (this.localId == null) {
 				this.link = "NONE";
@@ -144,5 +149,13 @@ public class PageLink implements Comparable<PageLink> {
 		} else {
 			this.link = page + PathResolver.LOCAL_LINK + localId;
 		}
+	}
+
+	private static @NonNull String stripFile(String page) {
+		if (page == null) {
+			return "";
+		}
+		int index = page.lastIndexOf(PathResolver.URL_PATH_SEPARATOR);
+		return (index >= 0) ? page.substring(0, index) : "";
 	}
 }

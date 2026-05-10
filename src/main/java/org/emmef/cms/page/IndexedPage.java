@@ -124,17 +124,6 @@ public class IndexedPage extends PathInfo {
 			if (isIndex()) {
 				links.remove(getPageLink());
 			}
-//			var anchors = new ArrayList<Element>();
-//			Element factory = new Document("/").createElement(ANCHOR_ELEMENT);
-//			links.forEach(link -> {
-//				Element anchor = factory.clone();
-//				anchor.attr("href", getResolver().toTargetHref(link));
-//				pages.stream()
-//						.filter(l -> l.getPageLink().isSamePage(link))
-//						.findFirst()
-//						.ifPresentOrElse(p -> anchor.html(nonBreakingText(p.getTitle())), () -> anchor.html(nonBreakingText(link.getLink())));
-//				anchors.add(anchor);
-//			});
 
 			this.mainTagList = List.copyOf(links);
 		}
