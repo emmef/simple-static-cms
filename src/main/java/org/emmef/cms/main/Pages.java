@@ -39,7 +39,7 @@ public class Pages {
 			return o1.getIndexedPage().getTitle().compareTo(o2.getIndexedPage().getTitle());
 		}).toList();
 
-		pageRecords.forEach(PageRecord::appendReferences);
+//		pageRecords.forEach(PageRecord::appendFootnotes);
 		collectedPages.forEach((page1) -> page1.replacePageReferences(collectedPages));
 		collectedPages.forEach(page -> page.generateMainTagList(tags));
 		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords, collectedPages));

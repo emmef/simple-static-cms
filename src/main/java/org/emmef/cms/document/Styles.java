@@ -2,8 +2,9 @@ package org.emmef.cms.document;
 
 public class Styles {
 	public static final String ARTICLE_DATA = "article-data";
-	public static final String ARTICLE_DATA_MODIFIED = "article-modified";
-	public static final String ARTICLE_DATA_COPYRIGHT = "article-copyright";
+	public static final String ARTICLE_DATA_MODIFIED = "article-data-modified";
+	public static final String ARTICLE_DATA_COPYRIGHT = "article-data-copyright";
+	public static final String ARTICLE_DATA_SEPARATOR = "article-data-separator";
 
 	public static final String ARTICLE_ENTRY_CONTENT = "latest-article-content";
 	public static final String ARTICLE_ENTRY_DATE = "latest-article-date";
@@ -16,7 +17,6 @@ public class Styles {
 
 	public static final String FOOTNOTE_EXTERNAL = "footnote-extern";
 	public static final String FOOTNOTE_CONTENT = "footnote-content";
-	public static final String FOOTNOTE_ENTRY = "footnote-entry";
 	public static final String FOOTNOTE_LIST = "footnote-list";
 	public static final String FOOTNOTE_NUMBER = "footnote-number";
 	public static final String FOOTNOTE_REFERENCE = "footnote-link";
