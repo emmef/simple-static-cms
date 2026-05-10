@@ -23,12 +23,6 @@ import java.util.function.Function;
 
 import static org.emmef.cms.page.DocumentUtils.*;
 
-/**
- * TODO Page summary
- * The page summary is cloned and will replace local links with absolute links that will be visited.
- * TODO Links last
- * The replacement of links will happen at the last possible moment on all pages.
- */
 @Slf4j
 public class IndexedPage extends PathInfo {
 	public static final String META_MATH = "scms-uses-math";
