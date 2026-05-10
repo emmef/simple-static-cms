@@ -3,9 +3,10 @@ package org.emmef.cms.page;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.emmef.cms.document.Attributes;
 import org.emmef.cms.document.Elements;
 import org.emmef.cms.document.Identifiers;
-import org.emmef.cms.document.Style;
+import org.emmef.cms.document.Styles;
 import org.emmef.cms.page.resolving.PageLink;
 import org.emmef.cms.page.resolving.PathInfo;
 import org.emmef.cms.parameters.NodeExpectation;
@@ -86,7 +87,7 @@ public class IndexedPage extends PathInfo {
 	private Element searchForLatestArticles(Element sourceBody) {
 		List<Element> elements = sourceBody.getAllElements().stream()
 				.filter(e -> Elements.LATEST_ARTICLE.equalsIgnoreCase(e.tagName()))
-				.filter(e -> Identifiers.LATEST_ARTICLE_ID.equalsIgnoreCase(e.attr("id")))
+				.filter(e -> Identifiers.ARTICLE_ENTRY_ID.equalsIgnoreCase(e.id()))
 				.toList();
 		if (elements.isEmpty()) {
 			return null;
@@ -147,7 +148,7 @@ public class IndexedPage extends PathInfo {
 		PageLink transformed = globalize ? globalized : getPageLink().localize(pageLink);
 		if (pageLink.isPage()) {
 			return Optional.of(new PageResult(globalized, (anchor) -> {
-				anchor.attr("href",
+				anchor.attr(Attributes.HREF,
 						transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
 				if (anchor.text().isBlank()) {
 					anchor.children().remove();
@@ -157,7 +158,7 @@ public class IndexedPage extends PathInfo {
 		}
 		if (captionById.containsKey(pageLink.getLocalId())) {
 			return Optional.of(new PageResult(globalized, (anchor) -> {
-				anchor.attr("href",
+				anchor.attr(Attributes.HREF,
 						transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
 				Element element = captionById.get(pageLink.getLocalId());
 				if (anchor.text().isBlank()) {
@@ -168,13 +169,13 @@ public class IndexedPage extends PathInfo {
 		}
 		if (noteById.containsKey(pageLink.getLocalId())) {
 			return Optional.of(new PageResult(globalized, (anchor) -> {
-				anchor.attr("href", transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
+				anchor.attr(Attributes.HREF, transformed.isLocal() ? transformed.getLink() : getResolver().toTargetHref(transformed));
 				if (anchor.text().isBlank()) {
 					FootNoteScanner.Note note = noteById.get(pageLink.getLocalId());
 					anchor.children().remove();
-					anchor.addClass(Style.FOOTNOTE_REFERENCE);
+					anchor.addClass(Styles.FOOTNOTE_REFERENCE);
 					if (globalize) {
-						anchor.addClass(Style.FOOTNOTE_EXTERNAL);
+						anchor.addClass(Styles.FOOTNOTE_EXTERNAL);
 					}
 					anchor.text(note.number().toString());
 				}

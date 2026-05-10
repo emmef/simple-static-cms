@@ -2,7 +2,6 @@ package org.emmef.cms.util;
 
 import lombok.NonNull;
 import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
 
 import java.util.Comparator;
 import java.util.function.Predicate;

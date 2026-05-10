@@ -39,7 +39,7 @@ class FootNoteScanner {
 
 	public void removeManagedNotes(@NonNull Element root) {
 		root.getElementsByTag(FOOTNOTE).forEach(note -> {
-			String id = note.attr("id");
+			String id = note.id();
 			if (id.isBlank()) {
 				return;
 			}
@@ -50,7 +50,7 @@ class FootNoteScanner {
 	private static @NonNull Map<String, Element> findAllNotesById(Element sourceDocument) {
 		var notes = new HashMap<String, Element>();
 		sourceDocument.getElementsByTag(FOOTNOTE).forEach(note -> {
-			String id = note.attr("id");
+			String id = note.id();
 			if (id.isBlank()) {
 				return;
 			}

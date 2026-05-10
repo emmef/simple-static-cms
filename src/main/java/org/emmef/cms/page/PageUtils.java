@@ -2,6 +2,7 @@ package org.emmef.cms.page;
 
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.NonNull;
+import org.emmef.cms.document.Attributes;
 import org.emmef.cms.page.resolving.PageLink;
 import org.emmef.cms.page.resolving.PathResolver;
 import org.emmef.cms.parameters.NodeExpectation;
@@ -43,7 +44,7 @@ public class PageUtils {
 		Map<String, Element> captionById = new HashMap<>();
 		body.getAllElements().stream()
 				.filter(node -> CAPTION_ELEMENTS.contains(node.nodeName()))
-				.filter(node -> !node.attr("id").isBlank())
+				.filter(node -> !node.id().isBlank())
 				.forEach(node -> {
 					captionById.put(node.id(), node.clone());
 				});
@@ -66,7 +67,7 @@ public class PageUtils {
 	public static @NonNull Element searchForSummary(@NonNull Element sourceBody ) {
 		List<Element> elements = sourceBody.getAllElements().stream()
 				.filter(e -> SUMMARY_ELEMENT.equalsIgnoreCase(e.tagName()))
-				.filter(e -> SUMMARY_ID.equalsIgnoreCase(e.attr("id")))
+				.filter(e -> SUMMARY_ID.equalsIgnoreCase(e.id()))
 				.collect(Collectors.toList());
 
 		if (!elements.isEmpty()) {
@@ -79,18 +80,18 @@ public class PageUtils {
 		Elements p = sourceBody.getElementsByTag(SUMMARY_ELEMENT);
 		Element first = p.first();
 		if (first != null) {
-			first.attr("id", SUMMARY_ID);
+			first.attr(Attributes.IDENTIFIER, SUMMARY_ID);
 			return first;
 		}
 		Element summary = new Document("/").createElement(SUMMARY_ELEMENT);
 		summary.remove();
-		summary.attr("id", SUMMARY_ID);
+		summary.attr(Attributes.IDENTIFIER, SUMMARY_ID);
 		return summary;
 	}
 
 	public static void scanForManagedPageLinks(@NonNull PathResolver resolver, @NonNull Element element, @NonNull Consumer<PageLink> consumer) {
 		element.getElementsByTag(ANCHOR).stream().map(node -> {
-			String href = node.attr("href").trim();
+			String href = node.attr(Attributes.HREF).trim();
 			if (href.isBlank()) {
 				return null;
 			}
@@ -102,7 +103,7 @@ public class PageUtils {
 
 	public static void scanForManagedAnchors(@NonNull PathResolver resolver, @NonNull Element element, @NonNull BiConsumer<Element, PageLink> consumer) {
 		element.getElementsByTag(ANCHOR).forEach(node -> {
-			String href = node.attr("href").trim();
+			String href = node.attr(Attributes.HREF).trim();
 			if (href.isBlank()) {
 				return;
 			}
