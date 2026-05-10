@@ -112,7 +112,7 @@ public class PageRecord {
 				.text(generateTitleTrail());
 
 
-		Element tags = nav.appendElement(Elements.DIV).addClass("tag-navigation");
+		Element tags = nav.appendElement(Elements.DIV).addClass(Styles.TAG_LIST);
 
 		// Add main tag navigation
 		List<PageLink> mainTagList = getIndexedPage().getMainTagList();
@@ -179,22 +179,29 @@ public class PageRecord {
 
 		SortedSet<FootNoteScanner.Note> notes = new TreeSet<>(Comparator.comparingInt(FootNoteScanner.Note::number));
 		notes.addAll(indexedPage.getNoteById().values());
+		AtomicInteger noteNumber = new AtomicInteger();
 		for (FootNoteScanner.Note note : notes) {
+			int number = noteNumber.incrementAndGet();
 			Element node = note.node();
 			Element reference = referenceList.appendElement(Elements.TABLE_ROW)
-					.addClass("reference").addClass("reference-item");
+					.addClass(Styles.FOOTNOTE_ENTRY);
+			if (number == 1) {
+				reference.addClass(Styles.LIST_FIRST);
+			}
+			if (number == notes.size()) {
+				reference.addClass(Styles.LIST_LAST);
+			}
 			reference.appendElement(Elements.TABLE_DATA)
-					.addClass("reference").addClass("reference-item-number")
+					.addClass(Styles.FOOTNOTE_NUMBER)
 					.text(Integer.toString(note.number()));
 			Element content = reference.appendElement(Elements.TABLE_DATA)
-					.addClass("reference").addClass("reference-item-content");
-			node.addClass("reference").addClass("reference-item-content-link");
+					.addClass(Styles.FOOTNOTE_CONTENT);
 			content.appendChild(node);
 		}
 	}
 
 	private void addDateAndCopyright(String copyRight) {
-		Element fileData = footer.appendElement(Elements.DIV).addClass("file-data");
+		Element fileData = footer.appendElement(Elements.DIV).addClass(Styles.ARTICLE_DATA);
 		StringBuilder fileDating = new StringBuilder();
 		DateTime timePublished = indexedPage.getTimePublished();
 		DateTime timeModified = indexedPage.getTimeModified();
@@ -203,8 +210,8 @@ public class PageRecord {
 			fileDating.append("\u00a0~(").append(formatFileDateInGMT(timePublished)).append(")");
 		}
 		fileDating.append("\u00a0GMT");
-		fileData.appendElement(Elements.DIV).addClass("source-modification")
-				.appendElement(Elements.SPAN).addClass("milliseconds-date")
+		fileData.appendElement(Elements.DIV).addClass(Styles.ARTICLE_DATA_MODIFIED)
+				.appendElement(Elements.SPAN).addClass(Styles.EPOCH_MILLIS)
 				.text(fileDating.toString());
 		if (copyRight != null) {
 			String years;
@@ -215,7 +222,7 @@ public class PageRecord {
 			} else {
 				years = String.format("%04d\u2013%04d", yearCreated, yearModified);
 			}
-			fileData.appendElement(Elements.SPAN).addClass("source-copyright")
+			fileData.appendElement(Elements.SPAN).addClass(Styles.ARTICLE_DATA_COPYRIGHT)
 					.text(String.format("\u00a9\u00a0%s\u00a0%s.", years, copyRight.replaceAll("\\s", "\u00a0")));
 		}
 	}
@@ -240,7 +247,7 @@ public class PageRecord {
 					return tag.stripFile().startsWith(getIndexedPage().getPageLink().stripFile());
 				})
 				.filter(tag -> !tag.equals(getIndexedPage().getPageLink())).toList();
-		Element subTagList = latestArticlesElement.prependElement("div").addClass("sub-tag-list");
+		Element subTagList = latestArticlesElement.prependElement(Elements.DIV).addClass(Styles.TAG_LIST);
 		addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages);
 		if (!subTags.isEmpty()) {
 			subTags.forEach(tag -> {
@@ -287,7 +294,7 @@ public class PageRecord {
 
 		item
 				.appendElement(Elements.DIV).addClass(Styles.ARTICLE_ENTRY_DATE)
-				.appendElement(Elements.SPAN).addClass(Styles.ARTICLE_ENTRY_EPOCH_MILLIS)
+				.appendElement(Elements.SPAN).addClass(Styles.EPOCH_MILLIS)
 				.text(Long.toString(page.getTimeModified().getMillis()));
 
 		item
