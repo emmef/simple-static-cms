@@ -35,15 +35,11 @@ public class Pages {
 		Optional<IndexedPage> rootPage = collectedPages.stream().filter(PathInfo::isRoot).findFirst();
 		String siteName = rootPage.map(IndexedPage::getTitle).orElse("Home");
 		SortedSet<PageLink> tags = createTags(collectedPages);
-		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).sorted((o1, o2) -> {
-			return o1.getIndexedPage().getTitle().compareTo(o2.getIndexedPage().getTitle());
-		}).toList();
+		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).sorted(Comparator.comparing(o -> o.getIndexedPage().getTitle())).toList();
 
-//		pageRecords.forEach(PageRecord::appendFootnotes);
-		collectedPages.forEach((page1) -> page1.replacePageReferences(collectedPages));
+		collectedPages.forEach(p -> p.replacePageReferences(collectedPages));
 		collectedPages.forEach(page -> page.generateMainTagList(tags));
 		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords, collectedPages));
-
 		Set<Path> collectedNames = new TreeSet<>();
 
 		pageRecords.forEach(page ->
@@ -65,7 +61,7 @@ public class Pages {
 		});
 	}
 
-	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, String cache, String siteName, List<IndexedPage> collectedPages, @NonNull SequencedCollection<PageLink> tags) {
+	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, String cache, String siteName, List<IndexedPage> collectedPages, @NonNull SortedSet<PageLink> tags) {
 		Path dynamicPath = page.getIndexedPage().getResolver().toTargetPath(page.getIndexedPage().getPageLink());
 		if (!collectedNames.contains(dynamicPath)) {
 			ensureDirectory(dynamicPath);
