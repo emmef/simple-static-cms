@@ -103,6 +103,7 @@ public class PageRecord {
 		addHeader(body, pages, tags);
 
 		body.appendChild(indexedPage.getArticle());
+		appendFootnotes(body);
 
 		addDateAndCopyright(copyRight);
 		if (!footer.children().isEmpty()) {
@@ -187,13 +188,13 @@ public class PageRecord {
 		return indexedPage.getTitle();
 	}
 
-	public void appendReferences() {
+	public void appendFootnotes(@NonNull Element body) {
 		if (indexedPage.getNoteById().isEmpty()) {
 			return;
 		}
-		Element referenceList = indexedPage.getArticle().appendElement(Elements.DIV)
-				.addClass(Styles.FOOTNOTE_LIST)
-				.appendElement(Elements.TABLE);
+
+		Element footnoteList = body.appendElement(Elements.DIV)
+				.addClass(Styles.FOOTNOTE_LIST);
 
 		SortedSet<FootNoteScanner.Note> notes = new TreeSet<>(Comparator.comparingInt(FootNoteScanner.Note::number));
 		notes.addAll(indexedPage.getNoteById().values());
@@ -201,20 +202,21 @@ public class PageRecord {
 		for (FootNoteScanner.Note note : notes) {
 			int number = noteNumber.incrementAndGet();
 			Element node = note.node();
-			Element reference = referenceList.appendElement(Elements.TABLE_ROW)
-					.addClass(Styles.FOOTNOTE_ENTRY);
+			Element reference = footnoteList.appendElement(Elements.DIV)
+					.addClass(Styles.LIST_ENTRY);
 			if (number == 1) {
 				reference.addClass(Styles.LIST_FIRST);
 			}
 			if (number == notes.size()) {
 				reference.addClass(Styles.LIST_LAST);
 			}
-			reference.appendElement(Elements.TABLE_DATA)
+			reference.appendElement(Elements.DIV)
 					.addClass(Styles.FOOTNOTE_NUMBER)
 					.text(Integer.toString(note.number()));
-			Element content = reference.appendElement(Elements.TABLE_DATA)
+
+			node.tagName(Elements.DIV)
 					.addClass(Styles.FOOTNOTE_CONTENT);
-			content.appendChild(node);
+			reference.appendChild(node);
 		}
 	}
 
@@ -228,8 +230,7 @@ public class PageRecord {
 			fileDating.append("\u00a0~(").append(formatFileDateInGMT(timePublished)).append(")");
 		}
 		fileDating.append("\u00a0GMT");
-		fileData.appendElement(Elements.DIV).addClass(Styles.ARTICLE_DATA_MODIFIED)
-				.appendElement(Elements.SPAN).addClass(Styles.EPOCH_MILLIS)
+		fileData.appendElement(Elements.SPAN).addClass(Styles.ARTICLE_DATA_MODIFIED).addClass(Styles.EPOCH_MILLIS)
 				.text(fileDating.toString());
 		if (copyRight != null) {
 			String years;
@@ -240,6 +241,7 @@ public class PageRecord {
 			} else {
 				years = String.format("%04d\u2013%04d", yearCreated, yearModified);
 			}
+			fileData.appendElement(Elements.SPAN).addClass(Styles.ARTICLE_DATA_SEPARATOR);
 			fileData.appendElement(Elements.SPAN).addClass(Styles.ARTICLE_DATA_COPYRIGHT)
 					.text(String.format("\u00a9\u00a0%s\u00a0%s.", years, copyRight.replaceAll("\\s", "\u00a0")));
 		}
@@ -302,11 +304,6 @@ public class PageRecord {
 		}
 
 		item
-				.appendElement(Elements.DIV).addClass(Styles.ARTICLE_ENTRY_DATE)
-				.appendElement(Elements.SPAN).addClass(Styles.EPOCH_MILLIS)
-				.text(Long.toString(page.getTimeModified().getMillis()));
-
-		item
 				.appendElement(Elements.DIV)
 				.addClass(Styles.ARTICLE_ENTRY_TITLE)
 				.appendElement(Elements.ANCHOR)
@@ -314,6 +311,10 @@ public class PageRecord {
 				.attr(Attributes.HREF, page.getResolver().toTargetHref(page.getPageLink()))
 				.text(page.getTitle());
 
+		item
+				.appendElement(Elements.DIV).addClass(Styles.ARTICLE_ENTRY_DATE)
+				.appendElement(Elements.SPAN).addClass(Styles.EPOCH_MILLIS)
+				.text(Long.toString(page.getTimeModified().getMillis()));
 
 		Element summary = item
 				.appendElement(Elements.DIV).addClass(Styles.ARTICLE_ENTRY_CONTENT);
