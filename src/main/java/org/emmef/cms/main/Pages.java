@@ -42,15 +42,12 @@ public class Pages {
 		pageRecords.forEach(PageRecord::appendReferences);
 		collectedPages.forEach((page1) -> page1.replacePageReferences(collectedPages));
 		collectedPages.forEach(page -> page.generateMainTagList(tags));
-		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords, tags, collectedPages));
+		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords, collectedPages));
 
 		Set<Path> collectedNames = new TreeSet<>();
-		Map<String, Object> cache = new HashMap<>();
-
-		cache.put(PageRecord.PAGE_COPYRIGHT, copyRight);
 
 		pageRecords.forEach(page ->
-				generatePageOutput(page, collectedNames, cache, siteName, collectedPages));
+				generatePageOutput(page, collectedNames, copyRight, siteName, collectedPages, tags));
 
 		toCopy.forEach(file -> {
 			Path relativeSource = source.relativize(file);
@@ -68,15 +65,17 @@ public class Pages {
 		});
 	}
 
-	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, Map<String, Object> cache, String siteName, List<IndexedPage> collectedPages) {
+	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, String cache, String siteName, List<IndexedPage> collectedPages, @NonNull SequencedCollection<PageLink> tags) {
 		Path dynamicPath = page.getIndexedPage().getResolver().toTargetPath(page.getIndexedPage().getPageLink());
 		if (!collectedNames.contains(dynamicPath)) {
 			ensureDirectory(dynamicPath);
-			try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
-				log.info("Wrote {} to file {}.", page, dynamicPath);
+			try {
+				try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
+					log.info("Wrote {} to file {}.", page, dynamicPath);
 
-				page.writePage(output, cache, siteName, collectedPages);
-				collectedNames.add(dynamicPath);
+					page.writePage(output, cache, siteName, collectedPages, tags);
+					collectedNames.add(dynamicPath);
+				}
 			} catch (IOException e) {
 				log.error("Error writing page {} to file {}", page, page.getIndexedPage(), e);
 			}
@@ -112,38 +111,38 @@ public class Pages {
 				log.info("Scanning directory {}.", directory);
 				try (Stream<Path> list = Files.list(directory.directory)) {
 					list.forEach(listedFile -> PathUtil.withRealAndNormalized(listedFile, file -> {
-						boolean ignore;
-						boolean isDirectory = file.toFile().isDirectory();
-						if ("_".equals(file.getFileName().toString().substring(0, 1))) {
-							ignore = true;
-						} else if (isDirectory) {
-							String name = file.toString();
-							ignore = name.equals(tagsPath);
-						} else {
-							ignore = false;
-						}
-						if (ignore) {
-							log.info("Ignoring {}: {}", isDirectory(file) ? "directory" : "file", file.getFileName());
-						} else if (isDirectory) {
-							if (directory.level < 5) {
-								subDirectories.add(new Directory(file, directory.level + 1));
-							}
-						} else {
-							String name = file.getFileName().toString();
-
-							if (HTML_PATTERN.matcher(name).find()) {
-								if (!collected.contains(file)) {
-									result.add(new PathInfo(pathResolver, file.normalize()));
-									collected.add(file);
+								boolean ignore;
+								boolean isDirectory = file.toFile().isDirectory();
+								if ("_".equals(file.getFileName().toString().substring(0, 1))) {
+									ignore = true;
+								} else if (isDirectory) {
+									String name = file.toString();
+									ignore = name.equals(tagsPath);
 								} else {
-									log.warn("Ignoring file \"{}\" as it is a duplicate.", file);
+									ignore = false;
 								}
-							} else {
-								toCopy.add(file);
-							}
-						}
+								if (ignore) {
+									log.info("Ignoring {}: {}", isDirectory(file) ? "directory" : "file", file.getFileName());
+								} else if (isDirectory) {
+									if (directory.level < 5) {
+										subDirectories.add(new Directory(file, directory.level + 1));
+									}
+								} else {
+									String name = file.getFileName().toString();
 
-					},
+									if (HTML_PATTERN.matcher(name).find()) {
+										if (!collected.contains(file)) {
+											result.add(new PathInfo(pathResolver, file.normalize()));
+											collected.add(file);
+										} else {
+											log.warn("Ignoring file \"{}\" as it is a duplicate.", file);
+										}
+									} else {
+										toCopy.add(file);
+									}
+								}
+
+							},
 							(t, p) -> log.error("Was not able to resolve \"{}\": {}", t, p)));
 					subDirectories.removeFirst();
 				}
@@ -174,7 +173,7 @@ public class Pages {
 		collectedPages.stream()
 				.filter(IndexedPage::isIndex)
 				.forEach(indexedPage -> tags.add(indexedPage.getPageLink()));
-		log.info("Existing tags: {}",  tags);
+		log.info("Existing tags: {}", tags);
 		return Collections.unmodifiableSortedSet(tags);
 	}
 

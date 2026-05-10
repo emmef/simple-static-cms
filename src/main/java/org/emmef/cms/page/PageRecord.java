@@ -25,11 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class PageRecord {
 	public static final String STYLE_CSS = "/style/simple-static-cms.css";
-	public static final String PAGE_COPYRIGHT = "copyright";
-	public static final String REFERENCE_LIST = "reference-list";
-	public static final String ARTICLE_TITLE = "article-title";
-	public static final String ACTION_SET_CONTRAST = "contrast-setter";
-	public static final String FOOTNOTE_LIST = "reference references";
 
 	private final Element header;
 
@@ -59,9 +54,9 @@ public class PageRecord {
 		return indexedPage.getResolver().toTargetHref(indexedPage.getPageLink());
 	}
 
-	public void writePage(@NonNull Writer writer, @NonNull Map<String, Object> cache, String siteName, @NonNull SequencedCollection<IndexedPage> pages) throws IOException {
+	public void writePage(@NonNull Writer writer, @NonNull String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages, @NonNull SequencedCollection<PageLink> tags) throws IOException {
 		addHead();
-		addBody((String) cache.get(PAGE_COPYRIGHT), siteName, pages);
+		addBody(copyRight, siteName, pages, tags);
 
 		Document.OutputSettings outputSettings = document.outputSettings();
 		outputSettings.charset(StandardCharsets.UTF_8);
@@ -101,29 +96,11 @@ public class PageRecord {
 		head.appendElement(Elements.TITLE).text(generateTitleTrail());
 	}
 
-	private void addBody(String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages) {
+	private void addBody(String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages, @NonNull SequencedCollection<PageLink> tags) {
 		Element body = document.body();
 		body.attr(Attributes.ON_LOAD, "EmmefUtil.init();");
-		body.appendChild(header);
-		Element nav = header.appendElement(Elements.NAVIGATION);
 
-		nav.appendElement(Elements.DIV)
-				.addClass(ARTICLE_TITLE)
-				.text(generateTitleTrail());
-
-
-		Element tags = nav.appendElement(Elements.DIV).addClass(Styles.TAG_LIST);
-
-		// Add main tag navigation
-		List<PageLink> mainTagList = getIndexedPage().getMainTagList();
-		mainTagList.forEach(anchor -> {
-			addTagLinkWithPadding(tags, anchor, pages);
-		});
-
-		nav.appendElement(Elements.SPAN)
-				.attr(Attributes.ON_CLICK, "EmmefUtil.contrast()")
-				.addClass(ACTION_SET_CONTRAST)
-				.html("◩");
+		addHeader(body, pages, tags);
 
 		body.appendChild(indexedPage.getArticle());
 
@@ -131,6 +108,48 @@ public class PageRecord {
 		if (!footer.children().isEmpty()) {
 			body.appendChild(footer);
 		}
+	}
+
+	private void addHeader(@NonNull Element body, @NonNull SequencedCollection<IndexedPage> pages, @NonNull SequencedCollection<PageLink> tags) {
+		body.appendChild(header);
+		Element nav = header.appendElement(Elements.NAVIGATION);
+
+		// Add title
+		nav.appendElement(Elements.DIV)
+				.addClass(Styles.ARTICLE_TITLE)
+				.text(generateTitleTrail());
+
+
+		// Add tag and parent tag links
+		Element tagList = nav.appendElement(Elements.DIV).addClass(Styles.TAG_LIST).addClass(Styles.TAG_LIST_MAIN);
+		List<PageLink> mainTagList = getIndexedPage().getMainTagList();
+		mainTagList.forEach(anchor -> {
+			addTagLinkWithPadding(tagList, anchor, pages);
+		});
+
+		// Add sub tags
+		if (getIndexedPage().isIndex()) {
+			List<PageLink> subTags = tags.stream()
+					.filter(tag -> {
+						return tag.stripFile().startsWith(getIndexedPage().getPageLink().stripFile());
+					})
+					.filter(tag -> !tag.equals(getIndexedPage().getPageLink())).toList();
+
+			Element subTagList = nav.appendElement(Elements.DIV).addClass(Styles.TAG_LIST).addClass(Styles.TAG_LIST_CHILDREN);
+			addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages);
+			if (!subTags.isEmpty()) {
+				subTags.forEach(tag -> {
+					addTagLinkWithPadding(subTagList, tag, pages);
+				});
+			}
+		}
+
+		// Add contrast change button
+		header
+				.appendElement(Elements.DIV).addClass(Styles.PAGE_SETTINGS)
+				.appendElement(Elements.DIV).addClass(Styles.ACTION_SET_CONTRAST).attr(Attributes.ON_CLICK, "EmmefUtil.contrast()")
+				.html("◩");
+
 	}
 
 	private void addTagLinkWithPadding(Element parent, PageLink anchor, @NonNull SequencedCollection<IndexedPage> pages) {
@@ -173,9 +192,8 @@ public class PageRecord {
 			return;
 		}
 		Element referenceList = indexedPage.getArticle().appendElement(Elements.DIV)
-				.addClass(FOOTNOTE_LIST)
-				.appendElement(Elements.TABLE)
-				.attr(Attributes.IDENTIFIER, REFERENCE_LIST);
+				.addClass(Styles.FOOTNOTE_LIST)
+				.appendElement(Elements.TABLE);
 
 		SortedSet<FootNoteScanner.Note> notes = new TreeSet<>(Comparator.comparingInt(FootNoteScanner.Note::number));
 		notes.addAll(indexedPage.getNoteById().values());
@@ -231,7 +249,7 @@ public class PageRecord {
 		return DATE_TIME_FORMATTER.format(getCalendarInGMT(timeModified1.getMillis()).toZonedDateTime());
 	}
 
-	public void replaceLastArticlesReference(@NonNull List<PageRecord> sortedPages, @NonNull SequencedCollection<PageLink> tags, @NonNull SequencedCollection<IndexedPage> pages) {
+	public void replaceLastArticlesReference(@NonNull List<PageRecord> sortedPages, @NonNull SequencedCollection<IndexedPage> pages) {
 		Element latestArticlesElement = indexedPage.getLatestArticles();
 		if (latestArticlesElement == null) {
 			return;
@@ -242,18 +260,6 @@ public class PageRecord {
 			return;
 		}
 		latestArticlesElement.children().remove();
-		List<PageLink> subTags = tags.stream()
-				.filter(tag -> {
-					return tag.stripFile().startsWith(getIndexedPage().getPageLink().stripFile());
-				})
-				.filter(tag -> !tag.equals(getIndexedPage().getPageLink())).toList();
-		Element subTagList = latestArticlesElement.prependElement(Elements.DIV).addClass(Styles.TAG_LIST);
-		addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages);
-		if (!subTags.isEmpty()) {
-			subTags.forEach(tag -> {
-				addTagLinkWithPadding(subTagList, tag, pages);
-			});
-		}
 
 		var matchingPages = getMatchingPages(sortedPages);
 
@@ -270,6 +276,9 @@ public class PageRecord {
 	private @NonNull ArrayList<IndexedPage> getMatchingPages(@NonNull List<PageRecord> sortedPages) {
 		var matchingPages = new ArrayList<IndexedPage>();
 		sortedPages.forEach(p -> {
+			if (p.indexedPage.isIndex()) {
+				return;
+			}
 			List<PageLink> mainTagList = p.getIndexedPage().getMainTagList();
 			if (mainTagList.isEmpty()) {
 				return;
