@@ -1,6 +1,7 @@
 package org.emmef.cms.page;
 
 import lombok.NonNull;
+import org.emmef.cms.document.Attributes;
 import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
 import org.emmef.cms.util.NodeHelper;
@@ -18,7 +19,7 @@ import java.util.regex.Pattern;
 public class DocumentUtils {
 	public static final Predicate<Element> TITLE = NodeHelper.elementByNameCaseInsensitive("title");
 	public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
-	public static final String ANCHOR_HREF = "href";
+	public static final String ANCHOR_HREF = Attributes.HREF;
 	public static final String META_TAG = "meta";
 	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive(META_TAG);
 
@@ -98,11 +99,11 @@ public class DocumentUtils {
 		Optional<Node> node = head.childNodes()
 				.stream()
 				.filter(e -> META_TAG.equalsIgnoreCase(e.nodeName()))
-				.filter(e -> nameValue.equalsIgnoreCase(e.attr("name")))
+				.filter(e -> nameValue.equalsIgnoreCase(e.attr(Attributes.NAME)))
 				.findFirst();
 
 
-		return node.isPresent() ? node.get().attr("value") : null;
+		return node.isPresent() ? node.get().attr(Attributes.META_VALUE) : null;
 	}
 
 	public static @NonNull Element getHtmlElement(@NonNull Document document) {
@@ -114,7 +115,7 @@ public class DocumentUtils {
 	}
 
 	public static @NonNull Document htmlDeclarationFromElement(@NonNull Element html) {
-		String language = html.attr("lang");
+		String language = html.attr(Attributes.HTML_LANGUAGE);
 		return Jsoup.parse("<!DOCTYPE html>" + (language.isBlank() ? "<html></html>" : "<html lang=\"" + language + "\"</html>"));
 	}
 }
