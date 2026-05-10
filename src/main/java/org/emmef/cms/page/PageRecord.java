@@ -50,10 +50,6 @@ public class PageRecord {
 		return "Page \"" + indexedPage.getTitle() + "\" (" + indexedPage.getPageLink() + ")";
 	}
 
-	public String getAbsoluteUrl() {
-		return indexedPage.getResolver().toTargetHref(indexedPage.getPageLink());
-	}
-
 	public void writePage(@NonNull Writer writer, @NonNull String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages, @NonNull SequencedCollection<PageLink> tags) throws IOException {
 		addHead();
 		addBody(copyRight, siteName, pages, tags);
@@ -137,7 +133,7 @@ public class PageRecord {
 					.filter(tag -> !tag.equals(getIndexedPage().getPageLink())).toList();
 
 			Element subTagList = nav.appendElement(Elements.DIV).addClass(Styles.TAG_LIST).addClass(Styles.TAG_LIST_CHILDREN);
-			addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages);
+//			addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages);
 			if (!subTags.isEmpty()) {
 				subTags.forEach(tag -> {
 					addTagLinkWithPadding(subTagList, tag, pages);
