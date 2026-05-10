@@ -3,6 +3,7 @@ package org.emmef.cms.page;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.emmef.cms.document.Elements;
 import org.emmef.cms.page.resolving.PageLink;
 import org.joda.time.DateTime;
 import org.jsoup.nodes.DataNode;
@@ -72,47 +73,47 @@ public class PageRecord {
 	private void addHead() {
 		Element head = document.head();
 
-		head.appendElement("meta").attr("charset", "UTF-8");
+		head.appendElement(Elements.META).attr("charset", "UTF-8");
 
-		head.appendElement("meta")
+		head.appendElement(Elements.META)
 				.attr("name", "viewport")
 				.attr("content", "width=device-width, initial-scale=1.0, maximum-scale=2, minimum-scale=0.5");
 
 		long stamp = System.currentTimeMillis();
 
-		head.appendElement("link")
+		head.appendElement(Elements.META_LINK)
 				.attr("rel", "stylesheet")
 				.attr("href", "https://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
 				.attr("type", "text/css");
-		head.appendElement("link")
+		head.appendElement(Elements.META_LINK)
 				.attr("rel", "stylesheet")
 				.attr("href", STYLE_CSS + "?stamp=" + stamp)
 				.attr("type", "text/css");
 		if (indexedPage.isMath()) {
-			head.appendElement("script")
+			head.appendElement(Elements.META_SCRIPT)
 					.attr("type", "text/javascript")
 					.attr("src", "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML")
 					.appendChild(new DataNode("MathJax.Hub.Config({displayAlign: \"left\", displayIndent: \"2ex\" });", ""));
 		}
-		head.appendElement("script")
+		head.appendElement(Elements.META_SCRIPT)
 				.attr("type", "text/javascript")
 				.attr("src", "/emmef-util.js?stamp=" + stamp);
 
-		head.appendElement("title").text(generateTitleTrail());
+		head.appendElement(Elements.TITLE).text(generateTitleTrail());
 	}
 
 	private void addBody(String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages) {
 		Element body = document.body();
 		body.attr("onload", "EmmefUtil.init();");
 		body.appendChild(header);
-		Element nav = header.appendElement("nav");
+		Element nav = header.appendElement(Elements.NAVIGATION);
 
-		nav.appendElement("div")
+		nav.appendElement(Elements.DIV)
 				.attr("class", "article-title")
 				.text(generateTitleTrail());
 
 
-		Element tags = nav.appendElement("div").attr("class", "tag-navigation");
+		Element tags = nav.appendElement(Elements.DIV).attr("class", "tag-navigation");
 
 		// Add main tag navigation
 		List<PageLink> mainTagList = getIndexedPage().getMainTagList();
@@ -120,7 +121,7 @@ public class PageRecord {
 			addTagLinkWithPadding(tags, anchor, pages, "main-tag-navigation-before", null, "main-tag-navigation-after");
 		});
 
-		nav.appendElement("span")
+		nav.appendElement(Elements.SPAN)
 				.attr("onclick", "EmmefUtil.contrast()")
 				.attr("class", "contrast-setter")
 				.html("◩");
@@ -134,12 +135,12 @@ public class PageRecord {
 	}
 
 	private void addTagLinkWithPadding(Element parent, PageLink anchor, @NonNull SequencedCollection<IndexedPage> pages, String beforeClass, String anchorClass, String afterClass) {
-		Element beforeSpan = parent.appendElement("span");
+		Element beforeSpan = parent.appendElement(Elements.SPAN);
 		if (beforeClass != null) {
 			beforeSpan.addClass(beforeClass);
 		}
 		addTagElement(parent, anchor, pages, anchorClass);
-		Element afterSpan = parent.appendElement("span");
+		Element afterSpan = parent.appendElement(Elements.SPAN);
 		if (afterClass != null) {
 			afterSpan.addClass(afterClass);
 		}
@@ -147,7 +148,7 @@ public class PageRecord {
 
 	private void addTagElement(@NonNull Element parent, @NonNull PageLink tag, @NonNull SequencedCollection<IndexedPage> pages, String optionalClass) {
 		pages.stream().filter(p -> p.getPageLink().equals(tag)).findFirst().ifPresent(page -> {
-			Element element = parent.appendElement("a");
+			Element element = parent.appendElement(Elements.ANCHOR);
 			element.attr("href", indexedPage.getResolver().toTargetHref(tag));
 			if (optionalClass != null) {
 				element.attr("class", optionalClass);
@@ -178,9 +179,9 @@ public class PageRecord {
 		if (indexedPage.getNoteById().isEmpty()) {
 			return;
 		}
-		Element referenceList = indexedPage.getArticle().appendElement("div")
+		Element referenceList = indexedPage.getArticle().appendElement(Elements.DIV)
 				.attr("class", "reference references")
-				.appendElement("table")
+				.appendElement(Elements.TABLE)
 				.attr("class", "reference reference-list")
 				.attr("id", REFERENCE_LIST);
 
@@ -188,13 +189,13 @@ public class PageRecord {
 		notes.addAll(indexedPage.getNoteById().values());
 		for (FootNoteScanner.Note note : notes) {
 			Element node = note.node();
-			Element reference = referenceList.appendElement("tr")
+			Element reference = referenceList.appendElement(Elements.TABLE_ROW)
 					.attr("class", "reference reference-item");
 //					.attr("id", node.id());
-			reference.appendElement("td")
+			reference.appendElement(Elements.TABLE_DATA)
 					.attr("class", "reference reference-item-number")
 					.text(Integer.toString(note.number()));
-			Element content = reference.appendElement("td")
+			Element content = reference.appendElement(Elements.TABLE_DATA)
 					.attr("class", "reference reference-item-content");
 			node.attr("class", "reference reference-item-content-link");
 			content.appendChild(node);
@@ -202,7 +203,7 @@ public class PageRecord {
 	}
 
 	private void addDateAndCopyright(String copyRight) {
-		Element fileData = footer.appendElement("div").attr("class", "file-data");
+		Element fileData = footer.appendElement(Elements.DIV).attr("class", "file-data");
 		StringBuilder fileDating = new StringBuilder();
 		DateTime timePublished = indexedPage.getTimePublished();
 		DateTime timeModified = indexedPage.getTimeModified();
@@ -211,8 +212,8 @@ public class PageRecord {
 			fileDating.append("\u00a0~(").append(formatFileDateInGMT(timePublished)).append(")");
 		}
 		fileDating.append("\u00a0GMT");
-		fileData.appendElement("div").attr("class", "source-modification")
-				.appendElement("span").attr("class", "milliseconds-date")
+		fileData.appendElement(Elements.DIV).attr("class", "source-modification")
+				.appendElement(Elements.SPAN).attr("class", "milliseconds-date")
 				.text(fileDating.toString());
 		if (copyRight != null) {
 			String years;
@@ -223,7 +224,7 @@ public class PageRecord {
 			} else {
 				years = String.format("%04d\u2013%04d", yearCreated, yearModified);
 			}
-			fileData.appendElement("span").attr("class", "source-copyright")
+			fileData.appendElement(Elements.SPAN).attr("class", "source-copyright")
 					.text(String.format("\u00a9\u00a0%s\u00a0%s.", years, copyRight.replaceAll("\\s", "\u00a0")));
 		}
 	}
@@ -251,7 +252,7 @@ public class PageRecord {
 		Element subTagList = latestArticlesElement.prependElement("div").attr("class", "sub-tag-list");
 		addTagLinkWithPadding(subTagList, getIndexedPage().getPageLink(), pages, "sub-tag-before", "tag-selected", "sub-tag-after");
 		if (!subTags.isEmpty()) {
-			subTagList.appendElement("span").addClass("sub-tag-separator");
+			subTagList.appendElement(Elements.SPAN).addClass("sub-tag-separator");
 			subTags.forEach(tag -> {
 				addTagLinkWithPadding(subTagList, tag, pages, "sub-tag-before", null, "sub-tag-after");
 			});
@@ -284,7 +285,7 @@ public class PageRecord {
 	}
 
 	private void addArticle(Element articleList, IndexedPage page, int itemNumber) {
-		Element item = articleList.appendElement("div");
+		Element item = articleList.appendElement(Elements.DIV);
 		if (itemNumber == 1) {
 			item.attr("class", "latest-articles-item latest-articles-item-first");
 		} else {
@@ -292,21 +293,21 @@ public class PageRecord {
 		}
 
 		item
-				.appendElement("div").attr("class", "latest-article-date")
-				.appendElement("span").attr("class", "milliseconds-age")
+				.appendElement(Elements.DIV).attr("class", "latest-article-date")
+				.appendElement(Elements.SPAN).attr("class", "milliseconds-age")
 				.text(Long.toString(page.getTimeModified().getMillis()));
 
 		item
-				.appendElement("div")
+				.appendElement(Elements.DIV)
 				.attr("class", "latest-article-title")
-				.appendElement("a")
+				.appendElement(Elements.ANCHOR)
 				.attr("class", "latest-article-link")
 				.attr("href", page.getResolver().toTargetHref(page.getPageLink()))
 				.text(page.getTitle());
 
 
 		Element summary = item
-				.appendElement("div").attr("class", "latest-article-content");
+				.appendElement(Elements.DIV).attr("class", "latest-article-content");
 
 		Element summaryInListing = page.getSummaryInListing();
 		summaryInListing.removeAttr("id");

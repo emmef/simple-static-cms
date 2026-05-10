@@ -18,7 +18,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.emmef.cms.page.DocumentUtils.ANCHOR_ELEMENT;
+import static org.emmef.cms.document.Elements.ANCHOR;
 import static org.emmef.cms.page.DocumentUtils.getMetaValueOrNull;
 
 public class PageUtils {
@@ -89,7 +89,7 @@ public class PageUtils {
 	}
 
 	public static void scanForManagedPageLinks(@NonNull PathResolver resolver, @NonNull Element element, @NonNull Consumer<PageLink> consumer) {
-		element.getElementsByTag(ANCHOR_ELEMENT).stream().map(node -> {
+		element.getElementsByTag(ANCHOR).stream().map(node -> {
 			String href = node.attr("href").trim();
 			if (href.isBlank()) {
 				return null;
@@ -101,7 +101,7 @@ public class PageUtils {
 	}
 
 	public static void scanForManagedAnchors(@NonNull PathResolver resolver, @NonNull Element element, @NonNull BiConsumer<Element, PageLink> consumer) {
-		element.getElementsByTag(ANCHOR_ELEMENT).forEach(node -> {
+		element.getElementsByTag(ANCHOR).forEach(node -> {
 			String href = node.attr("href").trim();
 			if (href.isBlank()) {
 				return;
