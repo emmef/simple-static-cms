@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import static org.emmef.cms.page.DocumentUtils.*;
 
@@ -28,6 +29,7 @@ public class IndexedPage extends PathInfo {
 	public static final String META_MATH = "scms-uses-math";
 	public static final String META_PUBLISH_DATE = "scms-published-date";
 	public static final String META_REPUBLISH_DATE = "scms-republish-date";
+	public static final Pattern ID_TO_TITLE = Pattern.compile("[^\\p{Alnum}]+");
 
 	@Getter
 	private final @NonNull String title;
@@ -173,9 +175,14 @@ public class IndexedPage extends PathInfo {
 					}
 					anchor.text(note.number().toString());
 				}
+				anchor.attr(Attributes.ANCHOR_TITLE, generateAnchorTitle(transformed.getLocalId()));
 			}));
 		}
 		return Optional.empty();
+	}
+
+	private String generateAnchorTitle(@NonNull String localId) {
+		return ID_TO_TITLE.matcher(localId).replaceAll(" ").trim();
 	}
 
 	private record PageResult(PageLink link, Consumer<Element> elementContentModifier) {
