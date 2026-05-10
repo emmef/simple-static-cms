@@ -1,22 +1,31 @@
 package org.emmef.cms.document;
 
 public class Styles {
+	public static final String ARTICLE_DATA = "article-data";
+	public static final String ARTICLE_DATA_MODIFIED = "article-modified";
+	public static final String ARTICLE_DATA_COPYRIGHT = "article-copyright";
+
 	public static final String ARTICLE_ENTRY_CONTENT = "latest-article-content";
 	public static final String ARTICLE_ENTRY_DATE = "latest-article-date";
-	public static final String ARTICLE_ENTRY_EPOCH_MILLIS = "milliseconds-age";
 	public static final String ARTICLE_ENTRY_LINK = "latest-article-link";
-	public static final String ARTICLE_ENTRY_LIST = "latest-articles";
+	public static final String ARTICLE_ENTRY_LIST = "latest-article-list";
 	public static final String ARTICLE_ENTRY_TITLE = "latest-article-title";
+
+	public static final String EPOCH_MILLIS = "milliseconds-date";
 
 	public static final String FOOTNOTE_EXTERNAL = "footnote-extern";
 	public static final String FOOTNOTE_REFERENCE = "footnote-link";
+	public static final String FOOTNOTE_CONTENT = "footnote-content";
+	public static final String FOOTNOTE_ENTRY = "footnote-entry";
+	public static final String FOOTNOTE_NUMBER = "footnote-number";
 
 	public static final String LIST_ENTRY = "list-entry";
-	public static final String LIST_FIRST = "list-first";
-	public static final String LIST_LAST = "list-last";
+	public static final String LIST_FIRST = "first-entry";
+	public static final String LIST_LAST = "last-entry";
 
-	public static final String TAG_AFTER = "tag-after";
-	public static final String TAG_BEFORE = "tag-before";
+	public static final String TAG_AFTER = "after-tag";
+	public static final String TAG_BEFORE = "before-tag";
 	public static final String TAG_LINK = "tag-link";
+	public static final String TAG_LIST = "tag-list";
 
 }
