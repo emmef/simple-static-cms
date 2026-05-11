@@ -32,16 +32,13 @@ public class Pages {
 	public static void readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PathResolver pathResolver) throws IOException {
 		List<Path> toCopy = new ArrayList<>();
 		List<IndexedPage> collectedPages = collectPages(source, toCopy, pathResolver);
-		Optional<IndexedPage> rootPage = collectedPages.stream().filter(PathInfo::isRoot).findFirst();
-		String siteName = rootPage.map(IndexedPage::getTitle).orElse("Home");
+		String siteName = collectedPages.stream().filter(PathInfo::isRoot).findFirst().map(IndexedPage::getTitle).orElse("Home");
 		SortedSet<PageLink> tags = createTags(collectedPages);
-		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).sorted(Comparator.comparing(o -> o.getIndexedPage().getTitle())).toList();
+		collectedPages.forEach(p -> p.resolveInContext(collectedPages, tags));
 
-		collectedPages.forEach(p -> p.replacePageReferences(collectedPages));
-		collectedPages.forEach(page -> page.generateMainTagList(tags));
-		pageRecords.forEach((page2) -> page2.replaceLastArticlesReference(pageRecords, collectedPages));
+
 		Set<Path> collectedNames = new TreeSet<>();
-
+		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).sorted(Comparator.comparing(o -> o.getIndexedPage().getTitle())).toList();
 		pageRecords.forEach(page ->
 				generatePageOutput(page, collectedNames, copyRight, siteName, collectedPages, tags));
 
