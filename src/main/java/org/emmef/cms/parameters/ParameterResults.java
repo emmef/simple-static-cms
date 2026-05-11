@@ -4,13 +4,16 @@ import com.google.common.collect.ImmutableList;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 @RequiredArgsConstructor
 public class ParameterResults {
     private static final String FLAG_IS_TRUE = "true";
 
-    private final Map<Parameter, List<String>> values = new TreeMap<>(Parameter.COMPARATOR);
+    private final Map<Parameter, List<String>> values = new TreeMap<>();
     private final List<String> extraArguments = new ArrayList<>();
 
     @NonNull

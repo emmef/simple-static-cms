@@ -5,7 +5,6 @@ import lombok.NonNull;
 import org.emmef.cms.document.Attributes;
 import org.emmef.cms.page.resolving.PageLink;
 import org.emmef.cms.page.resolving.PathResolver;
-import org.emmef.cms.parameters.NodeExpectation;
 import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
 import org.jsoup.nodes.Document;
@@ -20,6 +19,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.emmef.cms.document.Elements.ANCHOR;
+import static org.emmef.cms.document.Elements.BODY;
 import static org.emmef.cms.page.DocumentUtils.getMetaValueOrNull;
 
 public class PageUtils {
@@ -31,7 +31,7 @@ public class PageUtils {
 	private static Object log;
 
 	public static @NonNull Element getArticle(@NonNull Element sourceDocument) {
-		Element sourceBody = DocumentUtils.getNodeByTag(sourceDocument, "body", NodeExpectation.UNIQUE);
+		Element sourceBody = DocumentUtils.getNodeByTag(sourceDocument, BODY);
 		if (sourceBody == null) {
 			throw new PageException("Page has no article (in <body>)!");
 		}

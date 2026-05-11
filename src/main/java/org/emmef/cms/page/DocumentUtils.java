@@ -2,9 +2,7 @@ package org.emmef.cms.page;
 
 import lombok.NonNull;
 import org.emmef.cms.document.Attributes;
-import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.parameters.ValidationException;
-import org.emmef.cms.util.NodeHelper;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -13,41 +11,33 @@ import org.jsoup.select.Elements;
 
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.regex.Pattern;
 
 public class DocumentUtils {
-	public static final Predicate<Element> TITLE = NodeHelper.elementByNameCaseInsensitive("title");
-	public static final Pattern NULL_PATTERN = Pattern.compile("^(null|none|root)$", Pattern.CASE_INSENSITIVE);
-	public static final String ANCHOR_HREF = Attributes.HREF;
-	public static final String META_TAG = "meta";
-	public static final Predicate<Element> META = NodeHelper.elementByNameCaseInsensitive(META_TAG);
 
-	public static Element getNodeByTag(Element document, String tagName, NodeExpectation expectation) {
-
+	public static Element getNodeByTag(Element document, String tagName) {
 		Elements elementsByTagName = document.getElementsByTag(tagName);
-		Element item;
-		if (elementsByTagName.size() == 0) {
-			if (expectation == NodeExpectation.OPTIONAL) {
-				item = null;
-			} else {
+		switch (elementsByTagName.size()) {
+			case 0:
 				throw new ValidationException("Expected element with tag \"" + tagName + "\"");
-			}
-		} else {
-			if (elementsByTagName.size() > 1 && expectation == NodeExpectation.UNIQUE) {
-				throw new ValidationException("Expected exactly one element with tag \"" + tagName + "\"");
-			}
-			item = elementsByTagName.get(0);
+			case 1:
+				return elementsByTagName.first();
+			default:
+				Element first = elementsByTagName.removeFirst();
+				elementsByTagName.remove();
+				return first;
 		}
-		return item;
 	}
 
-	public static String getTitle(Node head) {
-		String title = getContent(head, TITLE);
-		if (title == null || title.isEmpty()) {
+	public static String getTitle(Element head) {
+		Element title = head.getElementsByTag(org.emmef.cms.document.Elements.TITLE).first();
+		if (title == null) {
 			throw new PageException("Title must not be empty");
 		}
-		return title.trim().replaceAll("\\s+", " ");
+		String text = title.text();
+		if (text.isBlank()) {
+			return "???";
+		}
+		return text.trim().replaceAll("\\s+", " ");
 	}
 
 	public static <T> @NonNull T getMetaValue(@NonNull Node head, @NonNull String nameValue, @NonNull String description, @NonNull Function<String, T> converter) {
@@ -85,12 +75,6 @@ public class DocumentUtils {
 		});
 	}
 
-	public static String getContent(Node head, Predicate<Element> predicate) {
-		Element meta = NodeHelper.searchFirst(head, predicate);
-		return meta != null ? meta.text() : null;
-	}
-
-
 	public static <T> T getMetaValue(@NonNull Node head, @NonNull String nameValue, @NonNull Function<String, T> converter) {
 		return converter.apply(getRawMetaValue(head, nameValue));
 	}
@@ -98,7 +82,7 @@ public class DocumentUtils {
 	private static String getRawMetaValue(@NonNull Node head, @NonNull String nameValue) {
 		Optional<Node> node = head.childNodes()
 				.stream()
-				.filter(e -> META_TAG.equalsIgnoreCase(e.nodeName()))
+				.filter(e -> org.emmef.cms.document.Elements.META.equalsIgnoreCase(e.nodeName()))
 				.filter(e -> nameValue.equalsIgnoreCase(e.attr(Attributes.NAME)))
 				.findFirst();
 

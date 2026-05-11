@@ -21,7 +21,7 @@ public class ParameterReader {
 			throw new IllegalArgumentException("Need at least one parameter");
 		}
 
-		ImmutableSortedSet.Builder<Parameter> parameterBuilder = ImmutableSortedSet.orderedBy(Parameter.COMPARATOR);
+		ImmutableSortedSet.Builder<Parameter> parameterBuilder = ImmutableSortedSet.naturalOrder();
 		for (Parameter parameter : parameters) {
 			if (parameter == null) {
 				throw new IllegalArgumentException("Parameter cannot be null");

@@ -2,6 +2,7 @@ package org.emmef.cms.document;
 
 public class Elements {
 	public static final String ANCHOR = "a";
+	public static final String BODY = "body";
 
 	public static final String DIV = "div";
 
