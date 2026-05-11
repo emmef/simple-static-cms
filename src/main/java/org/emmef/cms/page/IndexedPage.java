@@ -16,6 +16,7 @@ import org.jsoup.nodes.Element;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -78,36 +79,27 @@ public class IndexedPage extends PathInfo {
 		return String.format("%s %s \"%s\"", IndexedPage.class.getSimpleName(), getPageLink().getLink(), title);
 	}
 
-	private Element searchForLatestArticles(Element sourceBody) {
-		List<Element> elements = sourceBody.getAllElements().stream()
-				.filter(e -> Elements.LATEST_ARTICLE.equalsIgnoreCase(e.tagName()))
-				.filter(e -> Identifiers.ARTICLE_ENTRY_ID.equalsIgnoreCase(e.id()))
-				.toList();
-		if (elements.isEmpty()) {
-			return null;
-		}
-		Element latestArticle = elements.getFirst();
-		for (Element remove : elements.subList(1, elements.size())) {
-			remove.remove();
-		}
-		return latestArticle;
-	}
-
-	public void replacePageReferences(@NonNull List<IndexedPage> pages) {
-		replacePageReferences(article, pages, false); //  includes summary
-		noteById.values().forEach(note -> replacePageReferences(article, pages, false));
-		replacePageReferences(summaryInListing, pages, true);
-	}
-
-	public void replacePageReferences(@NonNull Element element, @NonNull List<IndexedPage> pages, boolean globalize) {
-		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
+	public void resolveInContext(@NonNull List<IndexedPage> pages, @NonNull SortedSet<PageLink> tags) {
+		replacePageReferences(pages);
+		generateMainTagList(tags);
+		replaceLastArticlesReference(pages);
 	}
 
 	public List<PageLink> getMainTagList() {
 		return mainTagList != null ? mainTagList : List.of();
 	}
 
-	public void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
+	private void replacePageReferences(@NonNull List<IndexedPage> pages) {
+		replacePageReferences(article, pages, false); //  includes summary
+		noteById.values().forEach(note -> replacePageReferences(article, pages, false));
+		replacePageReferences(summaryInListing, pages, true);
+	}
+
+	private void replacePageReferences(@NonNull Element element, @NonNull List<IndexedPage> pages, boolean globalize) {
+		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
+	}
+
+	private void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
 		if (this.mainTagList == null) {
 			var links = new TreeSet<PageLink>();
 			if (isIndex() && !existingTagLinks.contains(getPageLink())) {
@@ -123,7 +115,6 @@ public class IndexedPage extends PathInfo {
 			this.mainTagList = List.copyOf(links);
 		}
 	}
-
 
 	private Optional<PageResult> findPage(@NonNull List<IndexedPage> pages, PageLink pageLink, boolean globalize) {
 		if (getPageLink().isSamePage(pageLink)) {
@@ -181,6 +172,94 @@ public class IndexedPage extends PathInfo {
 
 	private String generateAnchorTitle(@NonNull String localId) {
 		return ID_TO_TITLE.matcher(localId).replaceAll(" ").trim();
+	}
+
+	private Element searchForLatestArticles(Element sourceBody) {
+		List<Element> elements = sourceBody.getAllElements().stream()
+				.filter(e -> Elements.LATEST_ARTICLE.equalsIgnoreCase(e.tagName()))
+				.filter(e -> Identifiers.ARTICLE_ENTRY_ID.equalsIgnoreCase(e.id()))
+				.toList();
+		if (elements.isEmpty()) {
+			return null;
+		}
+		Element latestArticle = elements.getFirst();
+		for (Element remove : elements.subList(1, elements.size())) {
+			remove.remove();
+		}
+		return latestArticle;
+	}
+
+	private void replaceLastArticlesReference(@NonNull List<IndexedPage> sortedPages) {
+		Element latestArticlesElement = getLatestArticles();
+		if (latestArticlesElement == null) {
+			return;
+		}
+		if (!isIndex()) {
+			// No indices for non-index pages; remove the element
+			latestArticlesElement.remove();
+			return;
+		}
+		latestArticlesElement.children().remove();
+
+		var matchingPages = getMatchingPages(sortedPages);
+
+		if (matchingPages.isEmpty()) {
+			return;
+		}
+		latestArticlesElement.tagName("div");
+		latestArticlesElement.addClass(Styles.ARTICLE_ENTRY_LIST);
+		int entryCount = matchingPages.size();
+		AtomicInteger entryNumber = new AtomicInteger(0);
+		matchingPages.forEach((page) -> addArticle(latestArticlesElement, page, entryNumber.incrementAndGet(), entryCount));
+	}
+
+	private @NonNull ArrayList<IndexedPage> getMatchingPages(@NonNull List<IndexedPage> pages) {
+		var matchingPages = new ArrayList<IndexedPage>();
+		pages.forEach(p -> {
+			if (p.isIndex()) {
+				return;
+			}
+			List<PageLink> mainTagList = p.getMainTagList();
+			if (mainTagList.isEmpty()) {
+				return;
+			}
+			PageLink pageLink = mainTagList.getLast();
+			if (getPageLink().equals(pageLink)) {
+				matchingPages.add(p);
+			}
+		});
+		return matchingPages;
+	}
+
+	private static void addArticle(Element articleList, IndexedPage page, int entryNumber, int entryCount) {
+		Element item = articleList.appendElement(Elements.DIV);
+		item.addClass(Styles.LIST_ENTRY);
+		if (entryNumber == 1) {
+			item.addClass(Styles.LIST_FIRST);
+		}
+		if (entryNumber == entryCount) {
+			item.addClass(Styles.LIST_LAST);
+		}
+
+		item
+				.appendElement(Elements.DIV)
+				.addClass(Styles.ARTICLE_ENTRY_TITLE)
+				.appendElement(Elements.ANCHOR)
+				.addClass(Styles.ARTICLE_ENTRY_LINK)
+				.attr(Attributes.HREF, page.getResolver().toTargetHref(page.getPageLink()))
+				.text(page.getTitle());
+
+		item
+				.appendElement(Elements.DIV).addClass(Styles.ARTICLE_ENTRY_DATE)
+				.appendElement(Elements.SPAN).addClass(Styles.EPOCH_MILLIS)
+				.text(Long.toString(page.getTimeModified().getMillis()));
+
+		Element summary = item
+				.appendElement(Elements.DIV).addClass(Styles.ARTICLE_ENTRY_CONTENT);
+
+		Element summaryInListing = page.getSummaryInListing();
+		summaryInListing.removeAttr("id");
+		summary.appendChild(summaryInListing.clone());
 	}
 
 	private record PageResult(PageLink link, Consumer<Element> elementContentModifier) {
