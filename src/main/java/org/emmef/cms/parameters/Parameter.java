@@ -2,25 +2,18 @@ package org.emmef.cms.parameters;
 
 
 import com.google.common.collect.ImmutableList;
-import lombok.*;
-import org.emmef.cms.util.NameComparator;
-import org.emmef.cms.util.Unwrap;
+import lombok.Getter;
+import lombok.NonNull;
 
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
 
 @Getter
-public class Parameter {
+public class Parameter implements Comparable<Parameter> {
     private static final Pattern NAME_PATTERN = Pattern.compile("^[0-9A-Z][-_0-9A-Z\\.~]*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern SHORTHAND_PATTERN = Pattern.compile("^[0-9A-Z]{1,3}$", Pattern.CASE_INSENSITIVE);
     private static final Pattern PROPERTY_PATTERN = NAME_PATTERN;
-    private static final Pattern VARIABLE_PATTERN = Pattern.compile("^[_0-9A-Z]+$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern SPLIT_PATTERN = Pattern.compile("\\p{Space}");
-
-    public static final String FLAG_IS_TRUE = Boolean.TRUE.toString();
-    public static final Comparator<Parameter> COMPARATOR = (Parameter o1, Parameter o2) -> Unwrap.compareTo(o1, o2, NameComparator::compareNonNull, (o) -> o.getName() );
 
     @NonNull
     private final String name;
@@ -223,5 +216,14 @@ public class Parameter {
 
     public ExtraArgumentStrategy getExtraArgumentStrategy() {
         return extraArgumentStrategy;
+    }
+
+    @Override
+    public int compareTo(@NonNull Parameter o) {
+        int ci = name.compareToIgnoreCase(o.name);
+        if (ci != 0) {
+            return ci;
+        }
+        return name.compareTo(o.name);
     }
 }

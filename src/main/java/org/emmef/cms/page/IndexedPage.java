@@ -9,12 +9,10 @@ import org.emmef.cms.document.Identifiers;
 import org.emmef.cms.document.Styles;
 import org.emmef.cms.page.resolving.PageLink;
 import org.emmef.cms.page.resolving.PathInfo;
-import org.emmef.cms.parameters.NodeExpectation;
 import org.emmef.cms.util.FileTimeStamps;
 import org.joda.time.DateTime;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
 
 import java.nio.file.Path;
 import java.util.*;
@@ -58,7 +56,7 @@ public class IndexedPage extends PathInfo {
 	public IndexedPage(Document document, @NonNull PathInfo info) {
 		super(info);
 		@NonNull Element sourceHtml = getHtmlElement(document);
-		Node head = getNodeByTag(sourceHtml, "head", NodeExpectation.UNIQUE);
+		Element head = getNodeByTag(sourceHtml, "head");
 		this.math = Boolean.parseBoolean(DocumentUtils.getMetaValueOrNull(head, META_MATH, "tex support", Function.identity()));
 		Path file = getSourcePath();
 		this.timePublished = PageUtils.getTime(head, META_PUBLISH_DATE, Collections.singletonList(FileTimeStamps.createdSupplier(file)));
