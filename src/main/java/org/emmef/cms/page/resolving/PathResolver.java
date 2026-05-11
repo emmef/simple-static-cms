@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.regex.Pattern;
 
@@ -44,7 +45,7 @@ public class PathResolver {
 	}
 
 	public PageLink fromSourceFile(@NonNull Path sourceFile) {
-		Path normalized = toNormalizedReal(sourceFile, "source file");
+		Path normalized = toNormalizedReal(sourceFile, false, "source file");
 		String sourceId = normalized.toString();
 		String siteId = sourceSiteRootPath.toString();
 		if (!sourceId.startsWith(siteId)) {
@@ -106,12 +107,12 @@ public class PathResolver {
 	}
 
 	private PathResolver(@NonNull Path sourceDocumentRootPath, Path sourceSiteRootPath, @NonNull Path targetDocumentRootPath, Path targetSiteRootPath) {
-		this.sourceDocumentRootPath = toNormalizedReal(sourceDocumentRootPath, "source document root");
-		this.targetDocumentRootPath = toNormalizedReal(targetDocumentRootPath, "target document root");
-		this.sourceSiteRootPath = resolveSiteRoot(this.sourceDocumentRootPath, sourceSiteRootPath, "source");
-		this.targetSiteRootPath = resolveSiteRoot(this.targetDocumentRootPath, targetSiteRootPath, "target");
-		this.sourceRefStartsWith = resolveSourceStartsWith(sourceDocumentRootPath, sourceSiteRootPath);
-		this.targetRefStartsWith = resolveSourceStartsWith(targetDocumentRootPath, targetSiteRootPath);
+		this.sourceDocumentRootPath = toNormalizedReal(sourceDocumentRootPath, false, "source document root");
+		this.targetDocumentRootPath = toNormalizedReal(targetDocumentRootPath, false, "target document root");
+		this.sourceSiteRootPath = resolveSiteRoot(this.sourceDocumentRootPath, sourceSiteRootPath, false, "source");
+		this.targetSiteRootPath = resolveSiteRoot(this.targetDocumentRootPath, targetSiteRootPath, true, "target");
+		this.sourceRefStartsWith = resolveSourceStartsWith(this.sourceDocumentRootPath, this.sourceSiteRootPath);
+		this.targetRefStartsWith = resolveSourceStartsWith(this.targetDocumentRootPath, this.targetSiteRootPath);
 	}
 
 	private PageLink fromHref(@NonNull String href, @NonNull String startsWith) {
@@ -170,26 +171,33 @@ public class PathResolver {
 		return prefixed.endsWith(URL_PATH_SEPARATOR) ? prefixed : prefixed + URL_PATH_SEPARATOR;
 	}
 
-	private static @NonNull Path resolveSiteRoot(@NonNull Path targetDocumentRootPath, Path targetSiteRootPath, @NonNull String sourceOrTarget) {
-		if (targetSiteRootPath == null) {
-			return targetDocumentRootPath;
+	private static @NonNull Path resolveSiteRoot(@NonNull Path documentRootPath, Path siteRootPath, boolean create, @NonNull String sourceOrTarget) {
+		if (siteRootPath == null) {
+			return documentRootPath;
 		}
 		String what = sourceOrTarget + " site root";
-		if (targetSiteRootPath.isAbsolute()) {
-			Path real = toNormalizedReal(targetSiteRootPath, "absolute " + what);
-			if (real.toString().startsWith(targetDocumentRootPath.toString())) {
+		if (siteRootPath.isAbsolute()) {
+			Path real = toNormalizedReal(siteRootPath, create, "absolute " + what);
+			if (real.toString().startsWith(documentRootPath.toString())) {
 				return real;
 			}
-			throw new IllegalArgumentException("The absolute " + what + " path is no child of the " + sourceOrTarget + " document root  \"" + targetDocumentRootPath + "\".");
+			throw new IllegalArgumentException("The absolute " + what + " path is no child of the " + sourceOrTarget + " document root  \"" + documentRootPath + "\".");
 		} else {
-			return toNormalizedReal(targetDocumentRootPath.relativize(targetSiteRootPath), "relative " + what);
+			return toNormalizedReal(documentRootPath.resolve(siteRootPath), create,"relative " + what);
 		}
 	}
 
-	private static @NonNull Path toNormalizedReal(@NonNull Path path, @NonNull String whatPath) {
+	private static @NonNull Path toNormalizedReal(@NonNull Path path, boolean create, @NonNull String whatPath) {
 		try {
 			return path.toRealPath().toAbsolutePath().normalize();
-		} catch (IOException e) {
+		}
+		catch (NoSuchFileException nsf) {
+			if (create && path.toFile().mkdirs()) {
+				return toNormalizedReal(path, false, whatPath);
+			}
+			throw new RuntimeException("Could not normalize " + whatPath + " path:", nsf);
+		}
+		catch (IOException e) {
 			throw new RuntimeException("Could not normalize " + whatPath + " path:", e);
 		}
 	}

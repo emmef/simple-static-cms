@@ -22,6 +22,7 @@ public class Main {
 	public static final Parameter SOURCE_ROOT = Parameter.single("source-root").withDescription("Contains the sources to generate pages from").mandatory().withShorthand("S");
 	public static final Parameter SOURCE_SITE_PATH = Parameter.single("source-site").withDescription("The pages to handle are in a sub site of the document root");
 	public static final Parameter TARGET_ROOT = Parameter.single("target").withDescription("The output directory of pages").mandatory().withShorthand("T");
+	public static final Parameter TARGET_SITE_PATH = Parameter.single("target-site").withDescription("The generated pages live in a sub site of the document root");
 	public static final Parameter COPYRIGHT = Parameter.single("copyright").withDescription("Copyright holder").withShorthand("C");
 
 	private static ParameterReader parameterReader = new ParameterReader(ExtraArgumentStrategy.ALLOW_BOTH,
@@ -29,6 +30,7 @@ public class Main {
 			SOURCE_ROOT,
 			TARGET_ROOT,
 			SOURCE_SITE_PATH,
+			TARGET_SITE_PATH,
 			COPYRIGHT);
 
 
@@ -58,13 +60,14 @@ public class Main {
 			Files.createDirectory(target, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
 		}
 
-		PathResolver uuidRelativeLinks = new PathResolver(Path.of(results.getValue(SOURCE_ROOT)), Path.of(results.getValue(TARGET_ROOT)));
+		PathResolver resolver = new PathResolver(Path.of(results.getValue(SOURCE_ROOT)), Path.of(results.getValue(TARGET_ROOT)));
 		if (results.isSet(SOURCE_SITE_PATH)) {
-			Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks.withSourceSiteRoot(Path.of(results.getValue(SOURCE_SITE_PATH))));
+			resolver = resolver.withSourceSiteRoot(Path.of(results.getValue(SOURCE_SITE_PATH)));
 		}
-		else {
-			Pages.readSourceGenerateOutput(source, target, copyRight, uuidRelativeLinks);
+		if (results.isSet(TARGET_SITE_PATH)) {
+			resolver = resolver.withTargetSiteRoot(Path.of(results.getValue(TARGET_SITE_PATH)));
 		}
+		Pages.readSourceGenerateOutput(source, target, copyRight, resolver);
 	}
 
 	private @NonNull String obtainUuidRelativeLinks(String value) {
