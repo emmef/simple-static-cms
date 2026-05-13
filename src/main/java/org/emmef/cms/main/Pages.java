@@ -77,6 +77,7 @@ public class Pages {
 
 					page.writePage(output, cache, siteName, collectedPages, tags);
 					collectedNames.add(dynamicPath);
+					Files.setPosixFilePermissions(dynamicPath, ATTRIBUTES);
 				}
 			} catch (IOException e) {
 				log.error("Error writing page {} to file {}", page, page.getIndexedPage(), e);
