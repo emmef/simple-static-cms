@@ -1,7 +1,5 @@
 @CHARSET "UTF-8";
-/**
-    Example stylesheet for the generated pages.
- */
+
 :root {
     --text-margin: 0.25rem;
 }
@@ -10,14 +8,16 @@
     background-color: inherit;
     color: inherit;
     font-kerning: normal;
+    padding: 0;
+    margin: 0;
+    margin-block-end: 0;
+    margin-block-start: 0;
 }
 
 body {
     min-width: 10em;
     max-width: 50em;
     font-size: 12pt;
-    padding: 0;
-    margin: 0;
     border: none;
 }
 
@@ -73,7 +73,7 @@ nav div.tag-list-children {
     text-align: left;
 }
 
-p, ul, ol, h1, h2, h3, h3, h5, h6 {
+p, ul, ol, li, h1, h2, h3, h3, h5, h6 {
     margin-top: 0;
     padding-top: 0;
     padding-bottom: 0;
@@ -84,8 +84,16 @@ p, h1, h2, h3, h3, h5, h6 {
     margin-right: 0;
 }
 
-p, ul, ol {
-    margin-bottom: 0.65rem;
+p + p, ul, ol {
+    margin-top: 0.5em;
+}
+
+div.footnote-content p {
+    margin-top: 0;
+}
+
+div.footnote-content p + p {
+    text-indent: 1em;
 }
 
 li {
@@ -101,7 +109,7 @@ h1 {
 h2 {
     font-size: 120%;
     margin-bottom: 0.1477rem;
-    font-weight: bolder;
+    font-weight: normal;
 }
 
 h3 {
@@ -178,12 +186,20 @@ section,.tag-link,.footnote-link {
 }
 
 a.footnote-link {
-    font-size: 70%;
+    font-size: 60%;
     font-weight: bold;
     line-height: 80%;
     vertical-align: super;
     text-decoration: none;
     font-style: italic;
+}
+
+/*a.footnote-link:before {*/
+/*    content: "\202f";*/
+/*}*/
+
+a.footnote-extern:before {
+    content: "*";
 }
 
 .footnote-list div.list-entry {
@@ -340,14 +356,6 @@ blockquote div {
         font-weight: normal;
         font-family: sans-serif;
         font-size: 80%;
-    }
-
-    a.footnote-link:before {
-        content: "\202f";
-    }
-
-    a.footnote-extern:before {
-        content: "\202f*";
     }
 
     .page-settings {
