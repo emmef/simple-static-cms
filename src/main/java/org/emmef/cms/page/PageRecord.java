@@ -24,7 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Slf4j
 public class PageRecord {
-	public static final String STYLE_CSS = "/style/simple-static-cms.css";
+	public static final String STYLE_CSS = "style/simple-static-cms.css";
+	public static final String EMMEF_UTIL_JS = "emmef-util.js";
 
 	private final Element header;
 
@@ -84,7 +85,7 @@ public class PageRecord {
 		}
 		head.appendElement(Elements.META_SCRIPT)
 				.attr(Attributes.META_TYPE, "text/javascript")
-				.attr(Attributes.META_SOURCE, localMetaLinks + "/emmef-util.js?stamp=" + stamp);
+				.attr(Attributes.META_SOURCE, localMetaLinks + EMMEF_UTIL_JS + "?stamp=" + stamp);
 
 		head.appendElement(Elements.TITLE).text(generateTitleTrail());
 	}
