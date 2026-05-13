@@ -34,8 +34,16 @@ public class Pages {
 		List<IndexedPage> collectedPages = collectPages(source, toCopy, pathResolver);
 		String siteName = collectedPages.stream().filter(PathInfo::isRoot).findFirst().map(IndexedPage::getTitle).orElse("Home");
 		SortedSet<PageLink> tags = createTags(collectedPages);
-		collectedPages.forEach(p -> p.resolveInContext(collectedPages, tags));
 
+		collectedPages.forEach(p -> {
+			p.replacePageReferences(collectedPages);
+		});
+		collectedPages.forEach(p -> {
+			p.generateMainTagList(tags);
+		});
+		collectedPages.forEach(p -> {
+			p.replaceLastArticlesReference(collectedPages);
+		});
 
 		Set<Path> collectedNames = new TreeSet<>();
 		List<PageRecord> pageRecords = collectedPages.stream().map(PageRecord::new).sorted(Comparator.comparing(o -> o.getIndexedPage().getTitle())).toList();
