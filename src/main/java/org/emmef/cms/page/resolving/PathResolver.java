@@ -1,14 +1,21 @@
 package org.emmef.cms.page.resolving;
 
+import com.google.common.collect.Lists;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @Getter
@@ -16,6 +23,7 @@ public class PathResolver {
 	public static final Pattern REPLACE_UPPER_CASE = Pattern.compile("\\p{Upper}");
 	public static final String URL_PATH_SEPARATOR = "/";
 	public static final Character LOCAL_LINK = '#';
+	public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
 
 	/**
 	 * Path in the file system from which the
@@ -32,6 +40,9 @@ public class PathResolver {
 		this(sourceDocumentRootPath, null, targetDocumentRootPath, null);
 	}
 
+	public static void ensureDirectory(Path dynamicPath, @NonNull Set<PosixFilePermission> permissions) {
+		ensureDirectory(dynamicPath, permissions, false);
+	}
 	public PathResolver withSourceSiteRoot(@NonNull Path sourceSiteRootPath) {
 		return new PathResolver(sourceDocumentRootPath, sourceSiteRootPath, targetDocumentRootPath, targetSiteRootPath);
 	}
@@ -192,7 +203,7 @@ public class PathResolver {
 			return path.toRealPath().toAbsolutePath().normalize();
 		}
 		catch (NoSuchFileException nsf) {
-			if (create && path.toFile().mkdirs()) {
+			if (create && ensureDirectory(path, ATTRIBUTES, true)) {
 				return toNormalizedReal(path, false, whatPath);
 			}
 			throw new RuntimeException("Could not normalize " + whatPath + " path:", nsf);
@@ -201,5 +212,37 @@ public class PathResolver {
 			throw new RuntimeException("Could not normalize " + whatPath + " path:", e);
 		}
 	}
+
+	private static boolean ensureDirectory(Path dynamicPath, @NonNull Set<PosixFilePermission> permissions, boolean isParent) {
+		var nonexistentParents = new ArrayList<Path>();
+		Path directory = isParent ? dynamicPath : dynamicPath.getParent();
+		while (directory != null && !directory.toFile().exists()) {
+			nonexistentParents.add(directory);
+			directory = directory.getParent();
+		}
+		if (directory == null) {
+			throw new IllegalStateException("No parents until root exist; will not create directory in root");
+		}
+		File file = directory.toFile();
+		if (file.exists()) {
+			if (!file.isDirectory()) {
+				throw new IllegalStateException("Directory " + dynamicPath + " exists but is not a directory");
+			}
+		}
+
+		for  (Path path : Lists.reverse(nonexistentParents)) {
+			File dir = path.toFile();
+			if (!dir.mkdir()) {
+				throw new IllegalStateException("Unable to create directory \"" + dir + "\" to build \"" + dynamicPath + "\"");
+			}
+			try {
+				Files.setPosixFilePermissions(path, permissions);
+			} catch (IOException e) {
+				throw new RuntimeException("Unable to set correct permissions for \"" + dir + "\" while building \"" + dynamicPath + "\"");
+			}
+		}
+		return true;
+	}
+
 
 }

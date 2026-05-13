@@ -12,12 +12,13 @@ import org.emmef.cms.util.PathUtil;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -27,7 +28,6 @@ import static java.nio.file.Files.isDirectory;
 @Slf4j
 public class Pages {
 	private static final Pattern HTML_PATTERN = Pattern.compile("\\.html?$", Pattern.CASE_INSENSITIVE);
-	public static final Set<PosixFilePermission> ATTRIBUTES = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")).value();
 
 	public static void readSourceGenerateOutput(@NonNull Path source, @NonNull Path target, String copyRight, @NonNull PathResolver pathResolver) throws IOException {
 		List<Path> toCopy = new ArrayList<>();
@@ -54,12 +54,9 @@ public class Pages {
 			Path relativeSource = source.relativize(file);
 			Path destination = pathResolver.getTargetSiteRootPath().resolve(relativeSource);
 			try {
-				Path dir = destination.getParent();
-				if (!Files.exists(dir)) {
-					Files.createDirectories(dir);
-				}
+				PathResolver.ensureDirectory(destination, PathResolver.ATTRIBUTES);
 				Files.copy(file, destination, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
-				Files.setPosixFilePermissions(destination, ATTRIBUTES);
+				Files.setPosixFilePermissions(destination, PathResolver.ATTRIBUTES);
 				log.info("Copied \"{}\" to \"{}\".", file, destination);
 			} catch (IOException e) {
 				log.error("Error copying page {} to {}", file, destination, e);
@@ -70,33 +67,20 @@ public class Pages {
 	private static void generatePageOutput(@NonNull PageRecord page, Set<Path> collectedNames, String cache, String siteName, List<IndexedPage> collectedPages, @NonNull SortedSet<PageLink> tags) {
 		Path dynamicPath = page.getIndexedPage().getResolver().toTargetPath(page.getIndexedPage().getPageLink());
 		if (!collectedNames.contains(dynamicPath)) {
-			ensureDirectory(dynamicPath);
+			PathResolver.ensureDirectory(dynamicPath, PathResolver.ATTRIBUTES);
 			try {
 				try (FileWriter output = new FileWriter(dynamicPath.toFile())) {
 					log.info("Wrote {} to file {}.", page, dynamicPath);
 
 					page.writePage(output, cache, siteName, collectedPages, tags);
 					collectedNames.add(dynamicPath);
-					Files.setPosixFilePermissions(dynamicPath, ATTRIBUTES);
+					Files.setPosixFilePermissions(dynamicPath, PathResolver.ATTRIBUTES);
 				}
 			} catch (IOException e) {
 				log.error("Error writing page {} to file {}", page, page.getIndexedPage(), e);
 			}
 		} else {
 			log.error("NOT writing page \"{}\" [{}] with already existing title", page.getIndexedPage().getTitle(), page.getIndexedPage().getPageLink());
-		}
-	}
-
-	private static void ensureDirectory(Path dynamicPath) {
-		File directory = dynamicPath.getParent().toFile();
-		if (directory.exists()) {
-			if (!directory.isDirectory()) {
-				throw new IllegalStateException("Directory " + dynamicPath + " exists but is not a directory");
-			}
-			return;
-		}
-		if (!directory.mkdirs()) {
-			throw new IllegalStateException("Unable to create directory " + dynamicPath);
 		}
 	}
 
