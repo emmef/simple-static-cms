@@ -79,17 +79,11 @@ public class IndexedPage extends PathInfo {
 		return String.format("%s %s \"%s\"", IndexedPage.class.getSimpleName(), getPageLink().getLink(), title);
 	}
 
-	public void resolveInContext(@NonNull List<IndexedPage> pages, @NonNull SortedSet<PageLink> tags) {
-		replacePageReferences(pages);
-		generateMainTagList(tags);
-		replaceLastArticlesReference(pages);
-	}
-
 	public List<PageLink> getMainTagList() {
 		return mainTagList != null ? mainTagList : List.of();
 	}
 
-	private void replacePageReferences(@NonNull List<IndexedPage> pages) {
+	public void replacePageReferences(@NonNull List<IndexedPage> pages) {
 		replacePageReferences(article, pages, false); //  includes summary
 		noteById.values().forEach(note -> {
 			replacePageReferences(note.node(), pages, false);
@@ -103,7 +97,7 @@ public class IndexedPage extends PathInfo {
 		});
 	}
 
-	private void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
+	public void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
 		if (this.mainTagList == null) {
 			var links = new TreeSet<PageLink>();
 			if (isIndex() && !existingTagLinks.contains(getPageLink())) {
@@ -193,7 +187,7 @@ public class IndexedPage extends PathInfo {
 		return latestArticle;
 	}
 
-	private void replaceLastArticlesReference(@NonNull List<IndexedPage> sortedPages) {
+	public void replaceLastArticlesReference(@NonNull List<IndexedPage> sortedPages) {
 		Element latestArticlesElement = getLatestArticles();
 		if (latestArticlesElement == null) {
 			return;
