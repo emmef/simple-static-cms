@@ -71,10 +71,6 @@ public class PageRecord {
 
 		long stamp = System.currentTimeMillis();
 
-//		head.appendElement(Elements.META_LINK)
-//				.attr(Attributes.META_RELATION, "stylesheet")
-//				.attr(Attributes.HREF, "https://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
-//				.attr(Attributes.META_TYPE, "text/css");
 		String localMetaLinks = indexedPage.getResolver().getTargetRefStartsWith();
 		head.appendElement(Elements.META_LINK)
 				.attr(Attributes.META_RELATION, "stylesheet")
