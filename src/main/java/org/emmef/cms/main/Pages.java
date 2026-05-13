@@ -52,7 +52,7 @@ public class Pages {
 
 		toCopy.forEach(file -> {
 			Path relativeSource = source.relativize(file);
-			Path destination = target.resolve(relativeSource);
+			Path destination = pathResolver.getTargetSiteRootPath().resolve(relativeSource);
 			try {
 				Path dir = destination.getParent();
 				if (!Files.exists(dir)) {
@@ -60,6 +60,7 @@ public class Pages {
 				}
 				Files.copy(file, destination, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
 				Files.setPosixFilePermissions(destination, ATTRIBUTES);
+				log.info("Copied \"{}\" to \"{}\".", file, destination);
 			} catch (IOException e) {
 				log.error("Error copying page {} to {}", file, destination, e);
 			}

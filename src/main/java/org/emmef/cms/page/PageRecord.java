@@ -71,13 +71,14 @@ public class PageRecord {
 
 		long stamp = System.currentTimeMillis();
 
+//		head.appendElement(Elements.META_LINK)
+//				.attr(Attributes.META_RELATION, "stylesheet")
+//				.attr(Attributes.HREF, "https://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
+//				.attr(Attributes.META_TYPE, "text/css");
+		String localMetaLinks = indexedPage.getResolver().getTargetRefStartsWith();
 		head.appendElement(Elements.META_LINK)
 				.attr(Attributes.META_RELATION, "stylesheet")
-				.attr(Attributes.HREF, "https://fonts.googleapis.com/css?family=Open+Sans:400italic,600italic,400,600")
-				.attr(Attributes.META_TYPE, "text/css");
-		head.appendElement(Elements.META_LINK)
-				.attr(Attributes.META_RELATION, "stylesheet")
-				.attr(Attributes.HREF, STYLE_CSS + "?stamp=" + stamp)
+				.attr(Attributes.HREF, localMetaLinks + STYLE_CSS + "?stamp=" + stamp)
 				.attr(Attributes.META_TYPE, "text/css");
 		if (indexedPage.isMath()) {
 			head.appendElement(Elements.META_SCRIPT)
@@ -87,7 +88,7 @@ public class PageRecord {
 		}
 		head.appendElement(Elements.META_SCRIPT)
 				.attr(Attributes.META_TYPE, "text/javascript")
-				.attr(Attributes.META_SOURCE, "/emmef-util.js?stamp=" + stamp);
+				.attr(Attributes.META_SOURCE, localMetaLinks + "/emmef-util.js?stamp=" + stamp);
 
 		head.appendElement(Elements.TITLE).text(generateTitleTrail());
 	}
