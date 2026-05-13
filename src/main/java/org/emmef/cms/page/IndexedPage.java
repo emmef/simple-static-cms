@@ -91,12 +91,16 @@ public class IndexedPage extends PathInfo {
 
 	private void replacePageReferences(@NonNull List<IndexedPage> pages) {
 		replacePageReferences(article, pages, false); //  includes summary
-		noteById.values().forEach(note -> replacePageReferences(article, pages, false));
+		noteById.values().forEach(note -> {
+			replacePageReferences(note.node(), pages, false);
+		});
 		replacePageReferences(summaryInListing, pages, true);
 	}
 
 	private void replacePageReferences(@NonNull Element element, @NonNull List<IndexedPage> pages, boolean globalize) {
-		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor)));
+		PageUtils.scanForManagedAnchors(getResolver(), element, (anchor, link) -> {
+			findPage(pages, link, globalize).ifPresent(result -> result.elementContentModifier.accept(anchor));
+		});
 	}
 
 	private void generateMainTagList(@NonNull SortedSet<PageLink> existingTagLinks) {
