@@ -4,6 +4,20 @@ const DateDisplayType = {
     VAR : "format.dateDisplayType",
 };
 
+const long_date_options = {
+    // weekday: "",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+};
+const short_date_options = {
+    // weekday: "",
+    // year: "",
+    month: "long",
+    day: "numeric",
+};
+
+
 class DocumentDate {
     static getDateDisplayType() {
         let storedValue = window.localStorage.getItem(DateDisplayType.VAR);
@@ -74,7 +88,10 @@ class DocumentDate {
         return result;
     }
 
-
+    static getLocale() {
+        let lang = document.documentElement.lang;
+        return lang;
+    }
 
     static getElementDate(element) {
         if (typeof(element.emmefStamp) === "number") {
@@ -97,7 +114,8 @@ class DocumentDate {
         for (let element of list) {
             let date = DocumentDate.getElementDate(element);
             if (date !== null) {
-                element.innerHTML = DocumentDate.getDisplayAgeFromMilliSeconds(now, date);
+                let usedOptions = date.getFullYear() < now.getFullYear() && date.getMonth() <= now.getMonth() ? long_date_options : short_date_options;
+                element.innerHTML = date.toLocaleDateString(DocumentDate.getLocale(), usedOptions);
             }
         }
     }
@@ -122,18 +140,20 @@ class EmmefUtil {
             window.setTimeout(replaceDataThread, 10000);
         };
         replaceDataThread();
+        EmmefUtil.applyStoredContrast();
+        EmmefUtil.applyStoredSerifState();
     }
 
     static getStoredContrastIdx() {
-        let contrastText = window.localStorage.getItem("color.contrast");
-        let contrast = 1.0 * contrastText;
+        let contrastText = 1.0 * window.localStorage.getItem("color.contrast");
+        let contrast = isNaN(contrastText) ? "1.0" : 1.0 * contrastText;
+
         return Math.max(0, Math.min(contrast, CONTRASTS.length - 1));
     }
 
     static applyStoredContrast() {
         let idx = EmmefUtil.getStoredContrastIdx();
         let contrast = Math.min(Math.max(CONTRASTS[idx], -1), 1);
-        window.console.log("Contrast: "+ contrast);
         document.documentElement.style.setProperty("--contrast", "" + contrast);
     }
 
@@ -187,6 +207,65 @@ class EmmefUtil {
             }
         }
     }
-}
 
-EmmefUtil.applyStoredContrast();
+    static toggleSerifState() {
+        let storedState = EmmefUtil.getStoredSerifState();
+        let newState = EmmefUtil.getNextSerifState(storedState);
+        EmmefUtil.setStoredSerifState(newState);
+        EmmefUtil.applyStoredSerifState();
+    }
+
+    static applyStoredSerifState() {
+        let state = EmmefUtil.getStoredSerifState();
+        switch (state) {
+            case "s":
+                document.documentElement.style.setProperty("font-family", "serif");
+                break;
+            case "n":
+                document.documentElement.style.setProperty("font-family", "OpenSans, \"Open Sans\", sans-serif");
+                break;
+            default:
+                document.documentElement.style.removeProperty("font-family");
+        }
+    }
+
+    static getStoredSerifState() {
+        return EmmefUtil.getSanitizedState(window.localStorage.getItem("text.serif-state"));
+    }
+
+    static setStoredSerifState(state) {
+        let sanitized = EmmefUtil.getSanitizedState(state);
+        if (sanitized) {
+            window.localStorage.setItem("text.serif-state", sanitized);
+        }
+        else {
+            window.localStorage.removeItem("text.serif-state");
+        }
+    }
+
+    static getSanitizedState(value) {
+        if (typeof (value) === "string") {
+            switch (value) {
+                case "S" :
+                case "s":
+                    return "s";
+                case 'N' :
+                case 'n':
+                    return "n";
+            }
+        }
+        return null;
+
+    }
+
+    static getNextSerifState(state) {
+        switch (state) {
+            case "s":
+                return "n";
+            case "n":
+                return null;
+            default:
+                return "s";
+        }
+    }
+}
