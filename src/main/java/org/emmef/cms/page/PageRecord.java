@@ -140,11 +140,12 @@ public class PageRecord {
 		}
 
 		// Add contrast change button
-		header
-				.appendElement(Elements.DIV).addClass(Styles.PAGE_SETTINGS)
-				.appendElement(Elements.DIV).addClass(Styles.ACTION_SET_CONTRAST).attr(Attributes.ON_CLICK, "EmmefUtil.contrast()")
-				.html("◩");
+		Element pageSettings = header
+				.appendElement(Elements.DIV);
 
+		pageSettings.addClass(Styles.PAGE_SETTINGS);
+		pageSettings.appendElement(Elements.DIV).addClass(Styles.ACTION_SET_CONTRAST).attr(Attributes.ON_CLICK, "EmmefUtil.contrast()").html("◩");
+		pageSettings.appendElement(Elements.DIV).addClass(Styles.ACTION_SET_CONTRAST).attr(Attributes.ON_CLICK, "EmmefUtil.toggleSerifState()").html("<center><strong title=\"Sans-serif;Serif;Browser\">A<strong></center>");
 	}
 
 	private void addTagLinkWithPadding(Element parent, PageLink anchor, @NonNull SequencedCollection<IndexedPage> pages) {
