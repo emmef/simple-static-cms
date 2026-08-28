@@ -52,7 +52,7 @@ public class PageRecord {
 	}
 
 	public void writePage(@NonNull Writer writer, @NonNull String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages, @NonNull SequencedCollection<PageLink> tags) throws IOException {
-		addHead();
+		addHead(siteName);
 		addBody(copyRight, siteName, pages, tags);
 
 		Document.OutputSettings outputSettings = document.outputSettings();
@@ -61,7 +61,7 @@ public class PageRecord {
 		writer.append(document.outerHtml());
 	}
 
-	private void addHead() {
+	private void addHead(String siteName) {
 		Element head = document.head();
 
 		head.appendElement(Elements.META).attr(Attributes.META_CHARSET, "UTF-8");
@@ -87,7 +87,7 @@ public class PageRecord {
 				.attr(Attributes.META_TYPE, "text/javascript")
 				.attr(Attributes.META_SOURCE, localMetaLinks + EMMEF_UTIL_JS + "?stamp=" + stamp);
 
-		head.appendElement(Elements.TITLE).text(generateTitleTrail());
+		head.appendElement(Elements.TITLE).text(generateTitleTrail(siteName));
 	}
 
 	private void addBody(String copyRight, String siteName, @NonNull SequencedCollection<IndexedPage> pages, @NonNull SequencedCollection<PageLink> tags) {
@@ -112,7 +112,7 @@ public class PageRecord {
 		// Add title
 		nav.appendElement(Elements.DIV)
 				.addClass(Styles.ARTICLE_TITLE)
-				.text(generateTitleTrail());
+				.text(getIndexedPage().getTitle());
 
 
 		// Add tag and parent tag links
@@ -179,8 +179,12 @@ public class PageRecord {
 		return result.toString();
 	}
 
-	private String generateTitleTrail() {
-		return indexedPage.getTitle();
+	private String generateTitleTrail(String siteName) {
+		if (siteName.equalsIgnoreCase(indexedPage.getTitle())) {
+			return indexedPage.getTitle();
+		}
+		var caption = new StringBuilder();
+		return caption.append(indexedPage.getTitle()).append(" | ").append(siteName).toString();
 	}
 
 	public void appendFootnotes(@NonNull Element body) {
